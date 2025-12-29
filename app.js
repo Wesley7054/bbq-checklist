@@ -230,7 +230,8 @@ function filteredChecklist() {
     .filter((it) => (q ? matchesText(it, q) : true))
     .filter((it) => {
       if (f === "all") return true;
-      if (f === "open") return !it.done && !it.bought;
+      //if (f === "open") return !it.done && !it.bought;
+      if (f === "open") return !it.done;
       if (f === "done") return !!it.done;
       if (f === "bought") return !!it.bought;
       return true;
