@@ -107,6 +107,7 @@ let state = {
 
 let unsubChecklist = null;
 let unsubWishlist = null;
+let unsubRoom = null;
 
 // Prevent event storms when snapshot updates UI
 let isRenderingFromRemote = false;
@@ -199,13 +200,25 @@ function startRealtime() {
     state.wishlist = snap.docs.map((d) => d.data());
     render();
   });
+
+  // Room meta (participants list)
+  unsubRoom = onSnapshot(roomRef, (snap) => {
+    const data = snap.data() || {};
+    const participants = Array.isArray(data.participants) ? data.participants : [];
+    state.meta.participants = participants.map((x) => String(x || "").trim()).filter(Boolean);
+    syncParticipantsInput();
+    renderSplit();
+  });
+
 }
 
 function stopRealtime() {
   if (unsubChecklist) unsubChecklist();
   if (unsubWishlist) unsubWishlist();
+  if (unsubRoom) unsubRoom();
   unsubChecklist = null;
   unsubWishlist = null;
+  unsubRoom = null;
 }
 
 // ===== UI rendering =====
@@ -255,6 +268,7 @@ function render() {
   });
 
   renderStats();
+  renderSplit();
 
   // Update meta display if you have a place for it (optional)
   state.meta.updatedAt = nowISO();
@@ -270,14 +284,18 @@ function renderTable({ items, tbody, type }) {
 
     const checked = type === "checklist" ? !!item.done : !!item.bought;
 
-    tr.appendChild(tdCheckbox(type, item, checked));
-    tr.appendChild(tdText(item.name, "strong"));
-    tr.appendChild(tdBadge(item.category));
-    tr.appendChild(tdQty(type, item));
-    tr.appendChild(tdWho(type, item));
-    tr.appendChild(tdCost(type, item));
-    tr.appendChild(tdNote(type, item));
-    tr.appendChild(tdActions(type, item));
+    const labels = type === "checklist"
+      ? { check: "完成", item: "物品", cat: "分類", qty: "數量", who: "邊個買", cost: "金額", note: "備註", act: "操作" }
+      : { check: "已買", item: "物品", cat: "分類", qty: "數量", who: "邊個買", cost: "金額", note: "備註", act: "操作" };
+
+    tr.appendChild(tdCheckbox(type, item, checked, labels.check));
+    tr.appendChild(tdText(item.name, "strong", labels.item));
+    tr.appendChild(tdBadge(item.category, labels.cat));
+    tr.appendChild(tdQty(type, item, labels.qty));
+    tr.appendChild(tdWho(type, item, labels.who));
+    tr.appendChild(tdCost(type, item, labels.cost));
+    tr.appendChild(tdNote(type, item, labels.note));
+    tr.appendChild(tdActions(type, item, labels.act));
 
     tbody.appendChild(tr);
   }
@@ -288,22 +306,24 @@ function renderTable({ items, tbody, type }) {
     td.colSpan = 8;
     td.className = "muted";
     td.style.padding = "14px 10px";
-    td.textContent = "No items here.";
+    td.textContent = "呢度暫時冇嘢。";
     tr.appendChild(td);
     tbody.appendChild(tr);
   }
 }
 
-function tdText(text, tag = "span") {
+function tdText(text, tag = "span", label = "") {
   const td = document.createElement("td");
+  if (label) td.dataset.label = label;
   const el = document.createElement(tag);
   el.textContent = text || "";
   td.appendChild(el);
   return td;
 }
 
-function tdBadge(category) {
+function tdBadge(category, label = "") {
   const td = document.createElement("td");
+  if (label) td.dataset.label = label;
   const span = document.createElement("span");
   span.className = "badge";
   span.textContent = category || "misc";
@@ -311,8 +331,9 @@ function tdBadge(category) {
   return td;
 }
 
-function tdCheckbox(type, item, checked) {
+function tdCheckbox(type, item, checked, label = "") {
   const td = document.createElement("td");
+  if (label) td.dataset.label = label;
   const input = document.createElement("input");
   input.type = "checkbox";
   input.className = "checkbox";
@@ -339,8 +360,9 @@ function tdCheckbox(type, item, checked) {
   return td;
 }
 
-function tdQty(type, item) {
+function tdQty(type, item, label = "") {
   const td = document.createElement("td");
+  if (label) td.dataset.label = label;
   const input = document.createElement("input");
   input.type = "number";
   input.min = "1";
@@ -357,10 +379,11 @@ function tdQty(type, item) {
   return td;
 }
 
-function tdWho(type, item) {
+function tdWho(type, item, label = "") {
   const td = document.createElement("td");
+  if (label) td.dataset.label = label;
   const input = document.createElement("input");
-  input.placeholder = "Name";
+  input.placeholder = "邊個買";
   input.value = item.who || "";
 
   // Use debounce-ish pattern: update on blur to reduce writes
@@ -373,8 +396,9 @@ function tdWho(type, item) {
   return td;
 }
 
-function tdCost(type, item) {
+function tdCost(type, item, label = "") {
   const td = document.createElement("td");
+  if (label) td.dataset.label = label;
   const input = document.createElement("input");
   input.type = "number";
   input.min = "0";
@@ -395,10 +419,11 @@ function tdCost(type, item) {
   return td;
 }
 
-function tdNote(type, item) {
+function tdNote(type, item, label = "") {
   const td = document.createElement("td");
+  if (label) td.dataset.label = label;
   const input = document.createElement("input");
-  input.placeholder = "Note...";
+  input.placeholder = "備註...";
   input.value = item.note || "";
 
   input.addEventListener("blur", async () => {
@@ -410,15 +435,16 @@ function tdNote(type, item) {
   return td;
 }
 
-function tdActions(type, item) {
+function tdActions(type, item, label = "") {
   const td = document.createElement("td");
+  if (label) td.dataset.label = label;
   td.style.whiteSpace = "nowrap";
 
   const btnMove = document.createElement("button");
   btnMove.type = "button";
   btnMove.className = "icon-btn";
-  btnMove.title = type === "checklist" ? "Move to wishlist" : "Move to checklist";
-  btnMove.textContent = type === "checklist" ? "→ Wish" : "→ List";
+  btnMove.title = type === "checklist" ? "移去「想買」" : "移去「清單」";
+  btnMove.textContent = type === "checklist" ? "→ 想買" : "→ 清單";
   btnMove.addEventListener("click", async () => {
     if (isRenderingFromRemote) return;
     await moveItem(type, item.id);
@@ -427,7 +453,7 @@ function tdActions(type, item) {
   const btnDel = document.createElement("button");
   btnDel.type = "button";
   btnDel.className = "icon-btn";
-  btnDel.title = "Delete";
+  btnDel.title = "刪除";
   btnDel.textContent = "🗑️";
   btnDel.style.marginLeft = "8px";
   btnDel.addEventListener("click", async () => {
@@ -455,20 +481,140 @@ function renderStats() {
   const checklistOpen = state.checklist.length - checklistDone - checklistBought;
 
   $("#checklistStats").innerHTML = `
-    <span class="badge">Total: ${state.checklist.length}</span>
-    <span class="badge">Done: ${checklistDone}</span>
-    <span class="badge">Bought: ${checklistBought}</span>
-    <span class="badge">Open: ${Math.max(0, checklistOpen)}</span>
+    <span class="badge">總數: ${state.checklist.length}</span>
+    <span class="badge">已完成: ${checklistDone}</span>
+    <span class="badge">已買: ${checklistBought}</span>
+    <span class="badge">未處理: ${Math.max(0, checklistOpen)}</span>
   `;
 
   const wishBought = state.wishlist.filter((it) => !!it.bought).length;
   const wishOpen = state.wishlist.length - wishBought;
 
   $("#wishlistStats").innerHTML = `
-    <span class="badge">Total: ${state.wishlist.length}</span>
-    <span class="badge">Bought: ${wishBought}</span>
-    <span class="badge">Open: ${Math.max(0, wishOpen)}</span>
+    <span class="badge">總數: ${state.wishlist.length}</span>
+    <span class="badge">已買: ${wishBought}</span>
+    <span class="badge">未處理: ${Math.max(0, wishOpen)}</span>
   `;
+}
+
+
+// ===== Split bill (participants + balance) =====
+function parseParticipants(text) {
+  return String(text || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function unique(arr) {
+  return Array.from(new Set(arr));
+}
+
+function inferredParticipantsFromItems() {
+  const all = [...state.checklist, ...state.wishlist];
+  return unique(
+    all
+      .map((it) => String(it.who || "").trim())
+      .filter(Boolean)
+  );
+}
+
+function getParticipants() {
+  const fromRoom = Array.isArray(state.meta.participants) ? state.meta.participants : [];
+  if (fromRoom.length > 0) return fromRoom;
+  return inferredParticipantsFromItems();
+}
+
+function syncParticipantsInput() {
+  const el = document.querySelector("#participantsInput");
+  if (!el) return;
+
+  // Don't overwrite while user is typing
+  if (document.activeElement === el) return;
+
+  const participants = getParticipants();
+  el.value = participants.join(", ");
+}
+
+async function updateParticipantsToRoom(participants) {
+  const cleaned = unique(participants.map((x) => String(x || "").trim()).filter(Boolean));
+  await setDoc(roomRef, { participants: cleaned, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+function renderSplit() {
+  const shareEl = document.querySelector("#perPersonShare");
+  const listEl = document.querySelector("#splitResult");
+  if (!shareEl || !listEl) return;
+
+  const all = [...state.checklist, ...state.wishlist];
+  const total = all.reduce((sum, it) => sum + safeNumber(it.cost), 0);
+
+  const participants = getParticipants();
+  const n = participants.length;
+
+  const per = n > 0 ? total / n : 0;
+  shareEl.textContent = currency(per);
+
+  if (n === 0) {
+    listEl.innerHTML = `<div class="muted">先喺上面輸入參加者，或者喺「邊個買」填返名。</div>`;
+    return;
+  }
+
+  // Paid per person
+  const paid = {};
+  for (const name of participants) paid[name] = 0;
+
+  for (const it of all) {
+    const who = String(it.who || "").trim();
+    const cost = safeNumber(it.cost);
+    if (!who || cost <= 0) continue;
+
+    // If name not in list, still count it (avoid losing data)
+    if (!(who in paid)) paid[who] = 0;
+
+    paid[who] += cost;
+  }
+
+  // Balance: + => should receive, - => should pay
+  const rows = Object.keys(paid).sort((a, b) => a.localeCompare(b, "zh-HK"));
+  listEl.innerHTML = rows
+    .map((name) => {
+      const diff = paid[name] - per;
+      const abs = Math.abs(diff);
+
+      let action = "剛剛好 ✅";
+      let hint = "唔使收 / 唔使俾";
+      if (diff > 0.00001) {
+        action = `應收返 ${currency(abs)}`;
+        hint = "你比多咗，可以收返差額";
+      } else if (diff < -0.00001) {
+        action = `應俾 ${currency(abs)}`;
+        hint = "你比少咗，要補返差額";
+      }
+
+      return `
+        <div class="settle__row">
+          <div>
+            <div class="settle__name">${escapeHTML(name)}</div>
+            <div class="settle__hint">已俾：${currency(paid[name])}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:800">${action}</div>
+            <div class="settle__hint">${hint}</div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function escapeHTML(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 // ===== Firestore operations =====
@@ -503,7 +649,7 @@ async function updateItem(type, id, patch) {
 }
 
 async function deleteItem(type, id) {
-  const ok = confirm("Delete this item?");
+  const ok = confirm("刪除呢個項目？");
   if (!ok) return;
 
   const col = colForType(type);
@@ -626,9 +772,26 @@ function bindUIEvents() {
   $("#searchWishlist").addEventListener("input", render);
   $("#filterWishlist").addEventListener("change", render);
 
+
+  // Participants (split bill)
+  const participantsInput = document.querySelector("#participantsInput");
+  if (participantsInput) {
+    participantsInput.addEventListener("blur", async () => {
+      if (isRenderingFromRemote) return;
+      const parts = parseParticipants(participantsInput.value);
+      await updateParticipantsToRoom(parts);
+      renderSplit();
+    });
+
+    // Live preview while typing (no writes)
+    participantsInput.addEventListener("input", () => {
+      renderSplit();
+    });
+  }
+
   // Reset room data
   $("#btnReset").addEventListener("click", async () => {
-    const ok = confirm(`Reset EVERYTHING for room "${ROOM_ID}"? This will clear the shared data.`);
+    const ok = confirm(`確定要清空房間 "${ROOM_ID}" 嘅所有資料？（會影響所有人同步）`);
     if (!ok) return;
 
     const batch = writeBatch(db);
@@ -658,9 +821,9 @@ function bindUIEvents() {
 
     try {
       await importJSONFile(file);
-      alert("Imported successfully ✅");
+      alert("匯入成功 ✅");
     } catch (err) {
-      alert(`Import failed: ${err.message}`);
+      alert(`匯入失敗：${err.message}`);
     } finally {
       e.target.value = "";
     }
@@ -696,5 +859,5 @@ onAuthStateChanged(auth, (user) => {
 // Start
 boot().catch((err) => {
   console.error(err);
-  alert("Boot failed. Check Firebase config and Firestore/Auth setup.\n\n" + err.message);
+  alert("啟動失敗。請檢查 Firebase 設定同 Firestore/Auth。\n\n" + err.message);
 });

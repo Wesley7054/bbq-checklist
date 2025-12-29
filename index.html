@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-HK">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>BBQ Checklist & Wishlist</title>
+  <title>燒烤清單 & 想買清單</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 
@@ -13,16 +13,16 @@
       <div class="brand">
         <div class="brand__logo">🔥</div>
         <div>
-          <h1 class="brand__title">BBQ Checklist</h1>
-          <p class="brand__subtitle">Checklist • Purchases • Wishlist</p>
+          <h1 class="brand__title">燒烤清單</h1>
+          <p class="brand__subtitle">清單 • 買咗未 • 想買</p>
         </div>
       </div>
 
       <div class="header__actions">
-        <button id="btnExport" class="btn btn--ghost" type="button">Export JSON</button>
-        <label class="btn btn--ghost" for="importFile">Import</label>
+        <button id="btnExport" class="btn btn--ghost" type="button">匯出 JSON</button>
+        <label class="btn btn--ghost" for="importFile">匯入</label>
         <input id="importFile" type="file" accept="application/json" hidden />
-        <button id="btnReset" class="btn btn--danger" type="button">Reset</button>
+        <button id="btnReset" class="btn btn--danger" type="button">清空</button>
       </div>
     </div>
   </header>
@@ -30,46 +30,46 @@
   <main class="container main">
     <section class="card">
       <div class="card__head">
-        <h2>Quick Add</h2>
-        <p class="muted">Add item to Checklist or Wishlist.</p>
+        <h2>快速新增</h2>
+        <p class="muted">新增物品到「清單」或「想買」。</p>
       </div>
 
       <form id="addForm" class="grid">
         <div class="field">
-          <label for="itemName">Item name</label>
-          <input id="itemName" name="itemName" placeholder="e.g., Charcoal / Tongs / Paper plates" required />
+          <label for="itemName">物品名稱</label>
+          <input id="itemName" name="itemName" placeholder="例如：炭 / 夾 / 紙碟" required />
         </div>
 
         <div class="field">
-          <label for="itemCategory">Category</label>
+          <label for="itemCategory">分類</label>
           <select id="itemCategory" name="itemCategory">
-            <option value="equipment">Equipment</option>
-            <option value="food">Food</option>
-            <option value="drink">Drink</option>
-            <option value="misc">Misc</option>
+            <option value="equipment">工具</option>
+            <option value="food">食物</option>
+            <option value="drink">飲品</option>
+            <option value="misc">其他</option>
           </select>
         </div>
 
         <div class="field">
-          <label for="itemList">Add to</label>
+          <label for="itemList">加到</label>
           <select id="itemList" name="itemList">
-            <option value="checklist">Checklist</option>
-            <option value="wishlist">Wishlist</option>
+            <option value="checklist">清單</option>
+            <option value="wishlist">想買</option>
           </select>
         </div>
 
         <div class="field">
-          <label for="itemQty">Qty</label>
+          <label for="itemQty">數量</label>
           <input id="itemQty" name="itemQty" type="number" min="1" value="1" />
         </div>
 
         <div class="field">
-          <label for="itemNote">Note</label>
-          <input id="itemNote" name="itemNote" placeholder="Optional (e.g., halal, size, brand)" />
+          <label for="itemNote">備註</label>
+          <input id="itemNote" name="itemNote" placeholder="可留空（例如：size、牌子）」 />
         </div>
 
         <div class="field field--actions">
-          <button class="btn" type="submit">Add</button>
+          <button class="btn" type="submit">新增</button>
         </div>
       </form>
     </section>
@@ -78,17 +78,17 @@
       <section class="card">
         <div class="card__head">
           <div>
-            <h2>Checklist</h2>
-            <p class="muted">Tick what’s packed / bought.</p>
+            <h2>清單</h2>
+            <p class="muted">勾選已處理 / 已買。</p>
           </div>
 
           <div class="toolbar">
-            <input id="searchChecklist" class="search" placeholder="Search checklist..." />
+            <input id="searchChecklist" class="search" placeholder="搜尋清單..." />
             <select id="filterChecklist" class="select">
-              <option value="all">All</option>
-              <option value="open">Open</option>
-              <option value="done">Done</option>
-              <option value="bought">Bought</option>
+              <option value="all">全部</option>
+              <option value="open">未處理</option>
+              <option value="done">已完成</option>
+              <option value="bought">已買</option>
             </select>
           </div>
         </div>
@@ -97,13 +97,13 @@
           <table class="table">
             <thead>
               <tr>
-                <th>Done</th>
-                <th>Item</th>
-                <th>Cat</th>
-                <th>Qty</th>
-                <th>Who bought</th>
-                <th>How much</th>
-                <th>Note</th>
+                <th>完成</th>
+                <th>物品</th>
+                <th>分類</th>
+                <th>數量</th>
+                <th>邊個買</th>
+                <th>金額</th>
+                <th>備註</th>
                 <th></th>
               </tr>
             </thead>
@@ -119,16 +119,16 @@
       <section class="card">
         <div class="card__head">
           <div>
-            <h2>Wish List</h2>
-            <p class="muted">Ideas / stuff to buy later.</p>
+            <h2>想買</h2>
+            <p class="muted">之後先買 / 想買嘅嘢。</p>
           </div>
 
           <div class="toolbar">
-            <input id="searchWishlist" class="search" placeholder="Search wishlist..." />
+            <input id="searchWishlist" class="search" placeholder="搜尋想買..." />
             <select id="filterWishlist" class="select">
-              <option value="all">All</option>
-              <option value="open">Open</option>
-              <option value="bought">Bought</option>
+              <option value="all">全部</option>
+              <option value="open">未處理</option>
+              <option value="bought">已買</option>
             </select>
           </div>
         </div>
@@ -137,13 +137,13 @@
           <table class="table">
             <thead>
               <tr>
-                <th>Bought</th>
-                <th>Item</th>
-                <th>Cat</th>
-                <th>Qty</th>
-                <th>Who bought</th>
-                <th>How much</th>
-                <th>Note</th>
+                <th>已買</th>
+                <th>物品</th>
+                <th>分類</th>
+                <th>數量</th>
+                <th>邊個買</th>
+                <th>金額</th>
+                <th>備註</th>
                 <th></th>
               </tr>
             </thead>
@@ -159,31 +159,51 @@
 
     <section class="card">
       <div class="card__head">
-        <h2>Summary</h2>
-        <p class="muted">Auto-calc totals. (Stored in your browser via LocalStorage.)</p>
+        <h2>結算</h2>
+        <p class="muted">自動計算總額同平分（多人同步）。</p>
       </div>
 
       <div class="summary">
         <div class="summary__box">
-          <div class="summary__label">Total spent</div>
+          <div class="summary__label">總支出</div>
           <div id="totalSpent" class="summary__value">$0</div>
         </div>
         <div class="summary__box">
-          <div class="summary__label">Bought items</div>
+          <div class="summary__label">已買項目</div>
           <div id="boughtCount" class="summary__value">0</div>
         </div>
         <div class="summary__box">
-          <div class="summary__label">Open items</div>
+          <div class="summary__label">未處理項目</div>
           <div id="openCount" class="summary__value">0</div>
         </div>
+      
+      <div class="settle">
+        <div class="settle__head">
+          <div>
+            <div class="settle__title">平分 & 差額</div>
+            <div class="muted">輸入參加者（用逗號分隔），或者留空會自動用「邊個買」欄位推算。</div>
+          </div>
+          <div class="settle__share">
+            <div class="settle__shareLabel">每人應該平分</div>
+            <div id="perPersonShare" class="settle__shareValue">$0</div>
+          </div>
+        </div>
+
+        <div class="settle__inputs">
+          <input id="participantsInput" class="input" placeholder="參加者：阿明, 阿強, 小美" />
+        </div>
+
+        <div id="splitResult" class="settle__list"></div>
       </div>
 
+</div>
+
       <details class="details">
-        <summary>How to use with a group (GitHub workflow)</summary>
+        <summary>點樣同朋友一齊用（GitHub workflow）</summary>
         <ol class="muted">
-          <li>Everyone edits the JSON export file, then PR back.</li>
-          <li>Or you keep one “source of truth” JSON in repo and import it.</li>
-          <li>GitHub Pages hosts the UI, you import latest JSON when needed.</li>
+          <li>大家改同一份匯出 JSON，再開 PR。</li>
+          <li>或者你保留一份「主檔」JSON，其他人匯入。</li>
+          <li>GitHub Pages 當網站，想更新就匯入最新 JSON。</li>
         </ol>
       </details>
     </section>
@@ -191,13 +211,12 @@
 
   <footer class="footer">
     <div class="container footer__inner">
-      <span class="muted">Made for group BBQ planning 🍖</span>
-      <span class="muted">Tip: Export JSON → commit to repo → everyone in sync.</span>
+      <span class="muted">用嚟同朋友 plan BBQ 🍖</span>
+      <span class="muted">小貼士：匯出 JSON → commit 入 repo → 大家同步。</span>
     </div>
   </footer>
 
   <script type="module" src="./app.js"></script>
 </body>
 </html>
-
 
