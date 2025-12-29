@@ -744,6 +744,7 @@ function bindUIEvents() {
     const list = $("#itemList").value; // "checklist" or "wishlist"
     const qty = Math.max(1, safeNumber($("#itemQty").value));
     const note = $("#itemNote").value.trim();
+    const who = $("#itemWho").value.trim();
 
     if (!name) return;
 
@@ -753,6 +754,7 @@ function bindUIEvents() {
       category,
       qty,
       note,
+      who,
       done: false,
       bought: false,
       who: "",
