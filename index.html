@@ -37,7 +37,12 @@
       <form id="addForm" class="grid">
         <div class="field">
           <label for="itemName">物品名稱</label>
-          <input id="itemName" name="itemName" placeholder="例如：炭 / 夾 / 紙碟" required />
+          <input
+            id="itemName"
+            name="itemName"
+            placeholder="例如：炭 / 夾 / 紙碟"
+            required
+          />
         </div>
 
         <div class="field">
@@ -60,19 +65,38 @@
 
         <div class="field">
           <label for="itemQty">數量</label>
-          <input id="itemQty" name="itemQty" type="number" min="1" value="1" />
+          <input
+            id="itemQty"
+            name="itemQty"
+            type="number"
+            min="1"
+            value="1"
+          />
+        </div>
+
+        <!-- 👇 新增：邊個買 -->
+        <div class="field">
+          <label for="itemWho">邊個買</label>
+          <input
+            id="itemWho"
+            name="itemWho"
+            placeholder="例如：Wesley"
+          />
         </div>
 
         <div class="field">
           <label for="itemNote">備註</label>
-          <input id="itemNote" name="itemNote" placeholder="可留空（例如：size、牌子）」 />
+          <input
+            id="itemNote"
+            name="itemNote"
+            placeholder="可留空（例如：size、牌子）"
+          />
         </div>
 
         <div class="field field--actions">
           <button class="btn" type="submit">新增</button>
         </div>
       </form>
-    </section>
 
     <section class="two-col">
       <section class="card">
