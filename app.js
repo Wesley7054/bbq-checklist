@@ -1,12 +1,58 @@
 /* 
-  BBQ Checklist App
-  - Single page static app
-  - Stores data in localStorage
-  - Supports Export/Import JSON for team syncing in GitHub
+  BBQ Checklist App (Firestore Realtime Sync)
+  - Single page static app (GitHub Pages friendly)
+  - Real-time sync across users via Firestore
+  - Room concept: /rooms/{roomId}
+  - Items stored in subcollections:
+      /rooms/{roomId}/checklist/{itemId}
+      /rooms/{roomId}/wishlist/{itemId}
+
+  Notes:
+  - This file assumes your HTML has the same element IDs as your current version.
+  - Requires <script type="module" src="app.js"></script> in index.html
+  - Requires Firebase project + Firestore enabled
+  - Recommended: enable Firebase Auth (Anonymous) + rules require auth
 */
 
-const STORAGE_KEY = "bbq_checklist_v1";
+// ===== Firebase (v9+ modular) =====
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+import {
+  getFirestore,
+  doc,
+  collection,
+  setDoc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  serverTimestamp,
+  query,
+  orderBy,
+  writeBatch,
+  getDocs
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+import {
+  getAuth,
+  signInAnonymously,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 
+// ===== 1) Paste your Firebase config here =====
+const firebaseConfig = {
+  apiKey: "AIzaSyCVE3IJt-6Cc7gtJ0Nshf7XuUOa_OIdPYs",
+  authDomain: "bbq-checklist.firebaseapp.com",
+  projectId: "bbq-checklist",
+  storageBucket: "bbq-checklist.firebasestorage.app",
+  messagingSenderId: "300895897312",
+  appId: "1:300895897312:web:fbf41a8ff697011e893285"
+};
+
+// ===== App init =====
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// ===== Helpers =====
 const $ = (sel) => document.querySelector(sel);
 
 function uid() {
@@ -14,10 +60,8 @@ function uid() {
   return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
 }
 
-function currency(amount) {
-  const n = Number(amount || 0);
-  // Keep it simple: no locale assumptions, user can edit.
-  return `$${n.toFixed(2)}`;
+function nowISO() {
+  return new Date().toISOString();
 }
 
 function safeNumber(v) {
@@ -25,69 +69,146 @@ function safeNumber(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-function nowISO() {
-  return new Date().toISOString();
+function currency(amount) {
+  const n = Number(amount || 0);
+  return `$${n.toFixed(2)}`;
 }
-
-function defaultState() {
-  return {
-    meta: {
-      version: 1,
-      updatedAt: nowISO()
-    },
-    checklist: [
-      { id: uid(), name: "Charcoal", category: "food", qty: 1, note: "", done: false, bought: false, who: "", cost: 0, createdAt: nowISO() },
-      { id: uid(), name: "Tongs", category: "equipment", qty: 1, note: "", done: false, bought: false, who: "", cost: 0, createdAt: nowISO() },
-      { id: uid(), name: "Paper plates", category: "misc", qty: 1, note: "", done: false, bought: false, who: "", cost: 0, createdAt: nowISO() }
-    ],
-    wishlist: [
-      { id: uid(), name: "Portable fan", category: "equipment", qty: 1, note: "If outdoor super hot", bought: false, who: "", cost: 0, createdAt: nowISO() }
-    ]
-  };
-}
-
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState();
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return defaultState();
-    if (!parsed.checklist || !parsed.wishlist) return defaultState();
-    return parsed;
-  } catch {
-    return defaultState();
-  }
-}
-
-function saveState() {
-  state.meta.updatedAt = nowISO();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state, null, 2));
-}
-
-let state = loadState();
 
 function matchesText(item, q) {
   const t = `${item.name} ${item.category} ${item.note} ${item.who}`.toLowerCase();
   return t.includes(q.toLowerCase());
 }
 
-function render() {
-  renderTable({
-    items: filteredChecklist(),
-    tbody: $("#checklistBody"),
-    type: "checklist"
-  });
-
-  renderTable({
-    items: filteredWishlist(),
-    tbody: $("#wishlistBody"),
-    type: "wishlist"
-  });
-
-  renderStats();
-  saveState();
+// ===== Room handling =====
+// Use URL: .../index.html?room=bbq-2025
+// Fallback room: bbq-2025
+function getRoomId() {
+  const u = new URL(location.href);
+  const room = (u.searchParams.get("room") || "bbq-2025").trim();
+  // Firestore doc id cannot contain '/' etc.
+  return room.replace(/[\/#?[\]]/g, "-");
 }
 
+const ROOM_ID = getRoomId();
+const roomRef = doc(db, "rooms", ROOM_ID);
+const checklistCol = collection(db, "rooms", ROOM_ID, "checklist");
+const wishlistCol = collection(db, "rooms", ROOM_ID, "wishlist");
+
+// ===== Local view state =====
+let state = {
+  meta: {
+    version: 2,
+    roomId: ROOM_ID,
+    updatedAt: nowISO()
+  },
+  checklist: [],
+  wishlist: []
+};
+
+let unsubChecklist = null;
+let unsubWishlist = null;
+
+// Prevent event storms when snapshot updates UI
+let isRenderingFromRemote = false;
+
+// ===== Default seed =====
+function seedItems() {
+  // Only seed if both collections are empty
+  return {
+    checklist: [
+      { name: "Charcoal", category: "food", qty: 1, note: "", done: false, bought: false, who: "", cost: 0 },
+      { name: "Tongs", category: "equipment", qty: 1, note: "", done: false, bought: false, who: "", cost: 0 },
+      { name: "Paper plates", category: "misc", qty: 1, note: "", done: false, bought: false, who: "", cost: 0 }
+    ],
+    wishlist: [
+      { name: "Portable fan", category: "equipment", qty: 1, note: "If outdoor super hot", bought: false, who: "", cost: 0 }
+    ]
+  };
+}
+
+async function ensureRoomExistsAndMaybeSeed() {
+  // Create room doc (upsert)
+  await setDoc(
+    roomRef,
+    {
+      roomId: ROOM_ID,
+      updatedAt: serverTimestamp(),
+      createdAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  // Check emptiness
+  const [cSnap, wSnap] = await Promise.all([getDocs(checklistCol), getDocs(wishlistCol)]);
+  if (!cSnap.empty || !wSnap.empty) return;
+
+  const seed = seedItems();
+  const batch = writeBatch(db);
+
+  for (const it of seed.checklist) {
+    const id = uid();
+    batch.set(doc(checklistCol, id), normalizeItemForWrite({ id, ...it }, "checklist"));
+  }
+  for (const it of seed.wishlist) {
+    const id = uid();
+    batch.set(doc(wishlistCol, id), normalizeItemForWrite({ id, ...it }, "wishlist"));
+  }
+
+  batch.set(roomRef, { updatedAt: serverTimestamp() }, { merge: true });
+  await batch.commit();
+}
+
+function normalizeItemForWrite(item, type) {
+  // Keep schema stable across clients
+  const base = {
+    id: item.id || uid(),
+    name: (item.name || "").trim(),
+    category: (item.category || "misc").trim(),
+    qty: Math.max(1, safeNumber(item.qty ?? 1)),
+    note: item.note || "",
+    who: item.who || "",
+    cost: Math.max(0, safeNumber(item.cost ?? 0)),
+    bought: !!item.bought,
+    done: type === "checklist" ? !!item.done : false,
+    createdAt: item.createdAt || nowISO(),
+    updatedAt: nowISO()
+  };
+
+  // Small logic: if cost > 0 => bought true
+  if (base.cost > 0) base.bought = true;
+
+  return base;
+}
+
+async function touchRoom() {
+  await setDoc(roomRef, { updatedAt: serverTimestamp() }, { merge: true });
+}
+
+// ===== Realtime listeners =====
+function startRealtime() {
+  // Order by createdAt for stable view. If old docs miss createdAt, Firestore still sorts them but could be mixed.
+  const qChecklist = query(checklistCol, orderBy("createdAt", "desc"));
+  const qWishlist = query(wishlistCol, orderBy("createdAt", "desc"));
+
+  unsubChecklist = onSnapshot(qChecklist, (snap) => {
+    state.checklist = snap.docs.map((d) => d.data());
+    render();
+  });
+
+  unsubWishlist = onSnapshot(qWishlist, (snap) => {
+    state.wishlist = snap.docs.map((d) => d.data());
+    render();
+  });
+}
+
+function stopRealtime() {
+  if (unsubChecklist) unsubChecklist();
+  if (unsubWishlist) unsubWishlist();
+  unsubChecklist = null;
+  unsubWishlist = null;
+}
+
+// ===== UI rendering =====
 function filteredChecklist() {
   const q = $("#searchChecklist").value.trim();
   const f = $("#filterChecklist").value;
@@ -115,6 +236,30 @@ function filteredWishlist() {
       if (f === "bought") return !!it.bought;
       return true;
     });
+}
+
+function render() {
+  // Avoid re-entrant changes while rendering from snapshots
+  isRenderingFromRemote = true;
+
+  renderTable({
+    items: filteredChecklist(),
+    tbody: $("#checklistBody"),
+    type: "checklist"
+  });
+
+  renderTable({
+    items: filteredWishlist(),
+    tbody: $("#wishlistBody"),
+    type: "wishlist"
+  });
+
+  renderStats();
+
+  // Update meta display if you have a place for it (optional)
+  state.meta.updatedAt = nowISO();
+
+  isRenderingFromRemote = false;
 }
 
 function renderTable({ items, tbody, type }) {
@@ -173,15 +318,21 @@ function tdCheckbox(type, item, checked) {
   input.className = "checkbox";
   input.checked = checked;
 
-  input.addEventListener("change", () => {
+  input.addEventListener("change", async () => {
+    if (isRenderingFromRemote) return;
+
+    const patch = {};
     if (type === "checklist") {
-      item.done = input.checked;
+      patch.done = input.checked;
+      // If marked done, not necessarily bought; keep as is
     } else {
-      item.bought = input.checked;
+      patch.bought = input.checked;
     }
-    // If marked bought, you probably don't need it open.
-    if (input.checked) item.bought = true;
-    render();
+
+    // If checked in any list => bought true is reasonable
+    if (input.checked) patch.bought = true;
+
+    await updateItem(type, item.id, patch);
   });
 
   td.appendChild(input);
@@ -195,10 +346,13 @@ function tdQty(type, item) {
   input.min = "1";
   input.value = item.qty ?? 1;
   input.style.width = "70px";
-  input.addEventListener("change", () => {
-    item.qty = Math.max(1, safeNumber(input.value));
-    render();
+
+  input.addEventListener("change", async () => {
+    if (isRenderingFromRemote) return;
+    const qty = Math.max(1, safeNumber(input.value));
+    await updateItem(type, item.id, { qty });
   });
+
   td.appendChild(input);
   return td;
 }
@@ -208,10 +362,13 @@ function tdWho(type, item) {
   const input = document.createElement("input");
   input.placeholder = "Name";
   input.value = item.who || "";
-  input.addEventListener("input", () => {
-    item.who = input.value;
-    saveState();
+
+  // Use debounce-ish pattern: update on blur to reduce writes
+  input.addEventListener("blur", async () => {
+    if (isRenderingFromRemote) return;
+    await updateItem(type, item.id, { who: input.value });
   });
+
   td.appendChild(input);
   return td;
 }
@@ -225,12 +382,15 @@ function tdCost(type, item) {
   input.className = "money";
   input.placeholder = "0.00";
   input.value = item.cost ?? 0;
-  input.addEventListener("change", () => {
-    item.cost = Math.max(0, safeNumber(input.value));
-    // If there is a cost, we can assume it is bought.
-    if (item.cost > 0) item.bought = true;
-    render();
+
+  input.addEventListener("change", async () => {
+    if (isRenderingFromRemote) return;
+    const cost = Math.max(0, safeNumber(input.value));
+    const patch = { cost };
+    if (cost > 0) patch.bought = true;
+    await updateItem(type, item.id, patch);
   });
+
   td.appendChild(input);
   return td;
 }
@@ -240,10 +400,12 @@ function tdNote(type, item) {
   const input = document.createElement("input");
   input.placeholder = "Note...";
   input.value = item.note || "";
-  input.addEventListener("input", () => {
-    item.note = input.value;
-    saveState();
+
+  input.addEventListener("blur", async () => {
+    if (isRenderingFromRemote) return;
+    await updateItem(type, item.id, { note: input.value });
   });
+
   td.appendChild(input);
   return td;
 }
@@ -257,8 +419,9 @@ function tdActions(type, item) {
   btnMove.className = "icon-btn";
   btnMove.title = type === "checklist" ? "Move to wishlist" : "Move to checklist";
   btnMove.textContent = type === "checklist" ? "→ Wish" : "→ List";
-  btnMove.addEventListener("click", () => {
-    moveItem(type, item.id);
+  btnMove.addEventListener("click", async () => {
+    if (isRenderingFromRemote) return;
+    await moveItem(type, item.id);
   });
 
   const btnDel = document.createElement("button");
@@ -267,8 +430,9 @@ function tdActions(type, item) {
   btnDel.title = "Delete";
   btnDel.textContent = "🗑️";
   btnDel.style.marginLeft = "8px";
-  btnDel.addEventListener("click", () => {
-    deleteItem(type, item.id);
+  btnDel.addEventListener("click", async () => {
+    if (isRenderingFromRemote) return;
+    await deleteItem(type, item.id);
   });
 
   td.appendChild(btnMove);
@@ -276,38 +440,8 @@ function tdActions(type, item) {
   return td;
 }
 
-function moveItem(type, id) {
-  if (type === "checklist") {
-    const idx = state.checklist.findIndex((x) => x.id === id);
-    if (idx === -1) return;
-    const [it] = state.checklist.splice(idx, 1);
-    // When moving to wishlist, done flag is irrelevant.
-    it.done = false;
-    state.wishlist.unshift(it);
-  } else {
-    const idx = state.wishlist.findIndex((x) => x.id === id);
-    if (idx === -1) return;
-    const [it] = state.wishlist.splice(idx, 1);
-    state.checklist.unshift(it);
-  }
-  render();
-}
-
-function deleteItem(type, id) {
-  const ok = confirm("Delete this item?");
-  if (!ok) return;
-
-  if (type === "checklist") {
-    state.checklist = state.checklist.filter((x) => x.id !== id);
-  } else {
-    state.wishlist = state.wishlist.filter((x) => x.id !== id);
-  }
-  render();
-}
-
 function renderStats() {
   const all = [...state.checklist, ...state.wishlist];
-
   const total = all.reduce((sum, it) => sum + safeNumber(it.cost), 0);
   const bought = all.filter((it) => !!it.bought).length;
   const open = all.filter((it) => !it.bought && !(it.done === true)).length;
@@ -337,91 +471,230 @@ function renderStats() {
   `;
 }
 
-/* ===== Events ===== */
+// ===== Firestore operations =====
+function colForType(type) {
+  return type === "checklist" ? checklistCol : wishlistCol;
+}
 
-$("#addForm").addEventListener("submit", (e) => {
-  e.preventDefault();
+async function addItem(type, item) {
+  const col = colForType(type);
+  const id = item.id || uid();
 
-  const name = $("#itemName").value.trim();
-  const category = $("#itemCategory").value;
-  const list = $("#itemList").value;
-  const qty = Math.max(1, safeNumber($("#itemQty").value));
-  const note = $("#itemNote").value.trim();
+  // Use setDoc with known id so UI can reference it
+  await setDoc(doc(col, id), normalizeItemForWrite({ ...item, id }, type));
+  await touchRoom();
+}
 
-  if (!name) return;
+async function updateItem(type, id, patch) {
+  const col = colForType(type);
+  const ref = doc(col, id);
 
-  const item = {
-    id: uid(),
-    name,
-    category,
-    qty,
-    note,
-    done: false,
-    bought: false,
-    who: "",
-    cost: 0,
-    createdAt: nowISO()
-  };
+  const normalizedPatch = { ...patch, updatedAt: nowISO() };
 
-  if (list === "wishlist") {
-    state.wishlist.unshift(item);
-  } else {
-    state.checklist.unshift(item);
+  // If cost set > 0 => bought true
+  if ("cost" in normalizedPatch) {
+    const cost = Math.max(0, safeNumber(normalizedPatch.cost));
+    normalizedPatch.cost = cost;
+    if (cost > 0) normalizedPatch.bought = true;
   }
 
-  e.target.reset();
-  $("#itemQty").value = "1";
-  $("#itemList").value = "checklist";
+  await updateDoc(ref, normalizedPatch);
+  await touchRoom();
+}
 
-  render();
-});
-
-$("#searchChecklist").addEventListener("input", render);
-$("#filterChecklist").addEventListener("change", render);
-$("#searchWishlist").addEventListener("input", render);
-$("#filterWishlist").addEventListener("change", render);
-
-$("#btnReset").addEventListener("click", () => {
-  const ok = confirm("Reset everything? This clears your browser storage.");
+async function deleteItem(type, id) {
+  const ok = confirm("Delete this item?");
   if (!ok) return;
-  state = defaultState();
-  saveState();
-  render();
-});
 
-$("#btnExport").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const col = colForType(type);
+  await deleteDoc(doc(col, id));
+  await touchRoom();
+}
+
+async function moveItem(type, id) {
+  const fromType = type;
+  const toType = type === "checklist" ? "wishlist" : "checklist";
+
+  const fromArr = fromType === "checklist" ? state.checklist : state.wishlist;
+  const item = fromArr.find((x) => x.id === id);
+  if (!item) return;
+
+  // Copy item with adjustments
+  const moved = { ...item };
+  if (toType === "wishlist") {
+    moved.done = false;
+  }
+
+  const batch = writeBatch(db);
+  batch.delete(doc(colForType(fromType), id));
+  batch.set(doc(colForType(toType), id), normalizeItemForWrite(moved, toType));
+  batch.set(roomRef, { updatedAt: serverTimestamp() }, { merge: true });
+
+  await batch.commit();
+}
+
+// ===== Export / Import =====
+async function exportJSON() {
+  const payload = {
+    meta: {
+      version: 2,
+      roomId: ROOM_ID,
+      exportedAt: nowISO()
+    },
+    checklist: state.checklist,
+    wishlist: state.wishlist
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `bbq-checklist-export-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `bbq-room-${ROOM_ID}-export-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(a.href);
-});
+}
 
-$("#importFile").addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
+async function importJSONFile(file) {
+  const text = await file.text();
+  const parsed = JSON.parse(text);
 
-  try {
-    const text = await file.text();
-    const parsed = JSON.parse(text);
+  if (!parsed || typeof parsed !== "object") throw new Error("Invalid JSON");
+  if (!Array.isArray(parsed.checklist) || !Array.isArray(parsed.wishlist)) {
+    throw new Error("JSON must include checklist and wishlist arrays");
+  }
 
-    if (!parsed || typeof parsed !== "object") throw new Error("Invalid JSON");
-    if (!Array.isArray(parsed.checklist) || !Array.isArray(parsed.wishlist)) {
-      throw new Error("JSON must include checklist and wishlist arrays");
+  // Replace remote data with imported data
+  const batch = writeBatch(db);
+
+  // Delete existing docs
+  const [cSnap, wSnap] = await Promise.all([getDocs(checklistCol), getDocs(wishlistCol)]);
+  for (const d of cSnap.docs) batch.delete(d.ref);
+  for (const d of wSnap.docs) batch.delete(d.ref);
+
+  // Write imported docs
+  for (const raw of parsed.checklist) {
+    const id = raw.id || uid();
+    batch.set(doc(checklistCol, id), normalizeItemForWrite({ ...raw, id }, "checklist"));
+  }
+  for (const raw of parsed.wishlist) {
+    const id = raw.id || uid();
+    batch.set(doc(wishlistCol, id), normalizeItemForWrite({ ...raw, id }, "wishlist"));
+  }
+
+  batch.set(roomRef, { updatedAt: serverTimestamp() }, { merge: true });
+  await batch.commit();
+}
+
+// ===== Events wiring =====
+function bindUIEvents() {
+  // Add new item
+  $("#addForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const name = $("#itemName").value.trim();
+    const category = $("#itemCategory").value;
+    const list = $("#itemList").value; // "checklist" or "wishlist"
+    const qty = Math.max(1, safeNumber($("#itemQty").value));
+    const note = $("#itemNote").value.trim();
+
+    if (!name) return;
+
+    const item = {
+      id: uid(),
+      name,
+      category,
+      qty,
+      note,
+      done: false,
+      bought: false,
+      who: "",
+      cost: 0,
+      createdAt: nowISO()
+    };
+
+    await addItem(list, item);
+
+    e.target.reset();
+    $("#itemQty").value = "1";
+    $("#itemList").value = "checklist";
+  });
+
+  // Filters/search (pure UI; snapshot will re-render anyway)
+  $("#searchChecklist").addEventListener("input", render);
+  $("#filterChecklist").addEventListener("change", render);
+  $("#searchWishlist").addEventListener("input", render);
+  $("#filterWishlist").addEventListener("change", render);
+
+  // Reset room data
+  $("#btnReset").addEventListener("click", async () => {
+    const ok = confirm(`Reset EVERYTHING for room "${ROOM_ID}"? This will clear the shared data.`);
+    if (!ok) return;
+
+    const batch = writeBatch(db);
+    const [cSnap, wSnap] = await Promise.all([getDocs(checklistCol), getDocs(wishlistCol)]);
+    for (const d of cSnap.docs) batch.delete(d.ref);
+    for (const d of wSnap.docs) batch.delete(d.ref);
+
+    const seed = seedItems();
+    for (const it of seed.checklist) {
+      const id = uid();
+      batch.set(doc(checklistCol, id), normalizeItemForWrite({ id, ...it }, "checklist"));
     }
+    for (const it of seed.wishlist) {
+      const id = uid();
+      batch.set(doc(wishlistCol, id), normalizeItemForWrite({ id, ...it }, "wishlist"));
+    }
+    batch.set(roomRef, { updatedAt: serverTimestamp() }, { merge: true });
 
-    state = parsed;
-    saveState();
-    render();
-    alert("Imported successfully ✅");
-  } catch (err) {
-    alert(`Import failed: ${err.message}`);
-  } finally {
-    e.target.value = "";
+    await batch.commit();
+  });
+
+  $("#btnExport").addEventListener("click", exportJSON);
+
+  $("#importFile").addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      await importJSONFile(file);
+      alert("Imported successfully ✅");
+    } catch (err) {
+      alert(`Import failed: ${err.message}`);
+    } finally {
+      e.target.value = "";
+    }
+  });
+}
+
+// ===== Auth + boot =====
+async function boot() {
+  // Show room id somewhere (optional)
+  // If your HTML has an element like #roomLabel, you can set it here:
+  // const roomLabel = document.querySelector("#roomLabel");
+  // if (roomLabel) roomLabel.textContent = ROOM_ID;
+
+  bindUIEvents();
+
+  // Anonymous auth helps you use safer Firestore rules
+  await signInAnonymously(auth);
+
+  await ensureRoomExistsAndMaybeSeed();
+  stopRealtime();
+  startRealtime();
+  render();
+}
+
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    // User is signed in
+    // You can log uid if needed:
+    // console.log("Signed in as:", user.uid);
   }
 });
 
-render();
+// Start
+boot().catch((err) => {
+  console.error(err);
+  alert("Boot failed. Check Firebase config and Firestore/Auth setup.\n\n" + err.message);
+});
