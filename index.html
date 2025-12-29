@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BBQ Checklist & Wishlist</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <div class="brand">
+        <div class="brand__logo">🔥</div>
+        <div>
+          <h1 class="brand__title">BBQ Checklist</h1>
+          <p class="brand__subtitle">Checklist • Purchases • Wishlist</p>
+        </div>
+      </div>
+
+      <div class="header__actions">
+        <button id="btnExport" class="btn btn--ghost" type="button">Export JSON</button>
+        <label class="btn btn--ghost" for="importFile">Import</label>
+        <input id="importFile" type="file" accept="application/json" hidden />
+        <button id="btnReset" class="btn btn--danger" type="button">Reset</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container main">
+    <section class="card">
+      <div class="card__head">
+        <h2>Quick Add</h2>
+        <p class="muted">Add item to Checklist or Wishlist.</p>
+      </div>
+
+      <form id="addForm" class="grid">
+        <div class="field">
+          <label for="itemName">Item name</label>
+          <input id="itemName" name="itemName" placeholder="e.g., Charcoal / Tongs / Paper plates" required />
+        </div>
+
+        <div class="field">
+          <label for="itemCategory">Category</label>
+          <select id="itemCategory" name="itemCategory">
+            <option value="equipment">Equipment</option>
+            <option value="food">Food</option>
+            <option value="drink">Drink</option>
+            <option value="misc">Misc</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="itemList">Add to</label>
+          <select id="itemList" name="itemList">
+            <option value="checklist">Checklist</option>
+            <option value="wishlist">Wishlist</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="itemQty">Qty</label>
+          <input id="itemQty" name="itemQty" type="number" min="1" value="1" />
+        </div>
+
+        <div class="field">
+          <label for="itemNote">Note</label>
+          <input id="itemNote" name="itemNote" placeholder="Optional (e.g., halal, size, brand)" />
+        </div>
+
+        <div class="field field--actions">
+          <button class="btn" type="submit">Add</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="two-col">
+      <section class="card">
+        <div class="card__head">
+          <div>
+            <h2>Checklist</h2>
+            <p class="muted">Tick what’s packed / bought.</p>
+          </div>
+
+          <div class="toolbar">
+            <input id="searchChecklist" class="search" placeholder="Search checklist..." />
+            <select id="filterChecklist" class="select">
+              <option value="all">All</option>
+              <option value="open">Open</option>
+              <option value="done">Done</option>
+              <option value="bought">Bought</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Done</th>
+                <th>Item</th>
+                <th>Cat</th>
+                <th>Qty</th>
+                <th>Who bought</th>
+                <th>How much</th>
+                <th>Note</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="checklistBody"></tbody>
+          </table>
+        </div>
+
+        <div class="card__foot">
+          <div class="stats" id="checklistStats"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card__head">
+          <div>
+            <h2>Wish List</h2>
+            <p class="muted">Ideas / stuff to buy later.</p>
+          </div>
+
+          <div class="toolbar">
+            <input id="searchWishlist" class="search" placeholder="Search wishlist..." />
+            <select id="filterWishlist" class="select">
+              <option value="all">All</option>
+              <option value="open">Open</option>
+              <option value="bought">Bought</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Bought</th>
+                <th>Item</th>
+                <th>Cat</th>
+                <th>Qty</th>
+                <th>Who bought</th>
+                <th>How much</th>
+                <th>Note</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="wishlistBody"></tbody>
+          </table>
+        </div>
+
+        <div class="card__foot">
+          <div class="stats" id="wishlistStats"></div>
+        </div>
+      </section>
+    </section>
+
+    <section class="card">
+      <div class="card__head">
+        <h2>Summary</h2>
+        <p class="muted">Auto-calc totals. (Stored in your browser via LocalStorage.)</p>
+      </div>
+
+      <div class="summary">
+        <div class="summary__box">
+          <div class="summary__label">Total spent</div>
+          <div id="totalSpent" class="summary__value">$0</div>
+        </div>
+        <div class="summary__box">
+          <div class="summary__label">Bought items</div>
+          <div id="boughtCount" class="summary__value">0</div>
+        </div>
+        <div class="summary__box">
+          <div class="summary__label">Open items</div>
+          <div id="openCount" class="summary__value">0</div>
+        </div>
+      </div>
+
+      <details class="details">
+        <summary>How to use with a group (GitHub workflow)</summary>
+        <ol class="muted">
+          <li>Everyone edits the JSON export file, then PR back.</li>
+          <li>Or you keep one “source of truth” JSON in repo and import it.</li>
+          <li>GitHub Pages hosts the UI, you import latest JSON when needed.</li>
+        </ol>
+      </details>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer__inner">
+      <span class="muted">Made for group BBQ planning 🍖</span>
+      <span class="muted">Tip: Export JSON → commit to repo → everyone in sync.</span>
+    </div>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
