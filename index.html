@@ -8,44 +8,99 @@
 </head>
 
 <body>
+  <!-- Mode + entry (two rhythms) -->
+  <section class="modebar" aria-label="模式選擇">
+    <div class="container modebar__inner">
+      <div class="modebar__left">
+        <div class="pill">
+          <span class="pill__label">模式</span>
+          <button id="btnModeElder" class="pill__btn" type="button">EZ</button>
+          <button id="btnModeTeen" class="pill__btn" type="button">Advance</button>
+        </div>
+
+        <div class="pill pill--muted">
+          <span class="pill__label">房間</span>
+          <span id="roomPill" class="pill__value">-</span>
+        </div>
+      </div>
+
+      <div class="modebar__right">
+        <!-- Elder-friendly entry buttons -->
+        <div class="entry entry--advance">
+          <button id="btnEnterList" class="big-btn" type="button">入清單</button>
+          <button id="btnNewRoom" class="big-btn big-btn--ghost" type="button">新開清單</button>
+          <button id="btnSetParticipants" class="big-btn big-btn--ghost" type="button">設定參加者</button>
+        </div>
+
+        <!-- Teen-friendly utilities -->
+        <div class="entry entry--teen">
+          <div class="font-controls" aria-label="字體大小">
+            <button id="btnFontDown" class="btn btn--ghost" type="button" aria-label="細字">A-</button>
+            <button id="btnFontUp" class="btn btn--ghost" type="button" aria-label="大字">A+</button>
+          </div>
+
+          <button id="btnExport" class="btn btn--ghost" type="button">匯出 JSON</button>
+          <label class="btn btn--ghost" for="importFile">匯入</label>
+          <input id="importFile" type="file" accept="application/json" hidden />
+          <button id="btnReset" class="btn btn--danger" type="button">清空</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <header class="header">
     <div class="container header__inner">
       <div class="brand">
         <div class="brand__logo">🔥</div>
         <div>
           <h1 class="brand__title">燒烤清單</h1>
-          <p class="brand__subtitle">清單 • 買咗未 • 想買</p>
+          <p class="brand__subtitle">清單 • 買咗未 • 想買 • 結算</p>
         </div>
       </div>
 
-      <div class="header__actions">
-        <button id="btnExport" class="btn btn--ghost" type="button">匯出 JSON</button>
-        <label class="btn btn--ghost" for="importFile">匯入</label>
-        <input id="importFile" type="file" accept="application/json" hidden />
-        <button id="btnReset" class="btn btn--danger" type="button">清空</button>
+      <div class="header__actions header__actions--teen">
+        <button id="btnExport2" class="btn btn--ghost" type="button">匯出 JSON</button>
+        <label class="btn btn--ghost" for="importFile2">匯入</label>
+        <input id="importFile2" type="file" accept="application/json" hidden />
+        <button id="btnReset2" class="btn btn--danger" type="button">清空</button>
       </div>
     </div>
   </header>
 
   <main class="container main">
-    <section class="card">
+    <!-- Teen: quick add parser -->
+    <section class="card teen-only">
       <div class="card__head">
-        <h2>快速新增</h2>
+        <div>
+          <h2>快速新增（Teen）</h2>
+          <p class="muted">例：<span class="kbd">雞翼 x20</span> / <span class="kbd">汽水 6</span>（自動填數量）</p>
+        </div>
+      </div>
+
+      <form id="quickAddForm" class="quickadd">
+        <input id="quickAddText" class="quickadd__input" placeholder="輸入：雞翼 x20 / 炭 2 / 紙碟 1" />
+        <select id="quickAddList" class="select">
+          <option value="checklist">清單</option>
+          <option value="wishlist">想買</option>
+        </select>
+        <button class="btn" type="submit">加</button>
+      </form>
+    </section>
+
+    <!-- Shared add form (elder will auto-hide extra fields) -->
+    <section class="card" id="addSection">
+      <div class="card__head">
+        <h2>新增物品</h2>
         <p class="muted">新增物品到「清單」或「想買」。</p>
       </div>
 
       <form id="addForm" class="grid">
-        <div class="field">
+        <div class="field field--name">
           <label for="itemName">物品名稱</label>
-          <input
-            id="itemName"
-            name="itemName"
-            placeholder="例如：炭 / 夾 / 紙碟"
-            required
-          />
+          <input id="itemName" name="itemName" placeholder="例如：炭 / 夾 / 紙碟" required />
         </div>
 
-        <div class="field">
+        <div class="field field--category teen-only">
           <label for="itemCategory">分類</label>
           <select id="itemCategory" name="itemCategory">
             <option value="equipment">工具</option>
@@ -55,7 +110,7 @@
           </select>
         </div>
 
-        <div class="field">
+        <div class="field field--list teen-only">
           <label for="itemList">加到</label>
           <select id="itemList" name="itemList">
             <option value="checklist">清單</option>
@@ -63,42 +118,33 @@
           </select>
         </div>
 
-        <div class="field">
+        <div class="field field--qty">
           <label for="itemQty">數量</label>
-          <input
-            id="itemQty"
-            name="itemQty"
-            type="number"
-            min="1"
-            value="1"
-          />
+          <input id="itemQty" name="itemQty" type="number" min="1" value="1" />
         </div>
 
-        <!-- 👇 新增：邊個買 -->
-        <div class="field">
-          <label for="itemWho">邊個買</label>
-          <input
-            id="itemWho"
-            name="itemWho"
-            placeholder="例如：炒麵"
-          />
+        <div class="field teen-only">
+          <label for="itemWant">邊個想買 / 認領</label>
+          <input id="itemWant" name="itemWant" placeholder="例如：阿明（想買）" />
         </div>
 
-        <div class="field">
+        <div class="field field--who">
+          <label for="itemWho">邊個買（實際付款）</label>
+          <input id="itemWho" name="itemWho" placeholder="例如：炒麵" />
+        </div>
+
+        <div class="field teen-only">
           <label for="itemNote">備註</label>
-          <input
-            id="itemNote"
-            name="itemNote"
-            placeholder="可留空（例如：size、牌子）"
-          />
+          <input id="itemNote" name="itemNote" placeholder="可留空（例如：size、牌子）" />
         </div>
 
         <div class="field field--actions">
           <button class="btn" type="submit">新增</button>
         </div>
       </form>
+    </section>
 
-    <section class="two-col">
+    <section class="two-col" id="listsSection">
       <section class="card">
         <div class="card__head">
           <div>
@@ -106,7 +152,7 @@
             <p class="muted">勾選已處理 / 已買。</p>
           </div>
 
-          <div class="toolbar">
+          <div class="toolbar teen-only">
             <input id="searchChecklist" class="search" placeholder="搜尋清單..." />
             <select id="filterChecklist" class="select">
               <option value="all">全部</option>
@@ -123,11 +169,12 @@
               <tr>
                 <th>完成</th>
                 <th>物品</th>
-                <th>分類</th>
+                <th class="teen-only">分類</th>
                 <th>數量</th>
+                <th class="teen-only">想買/認領</th>
                 <th>邊個買</th>
-                <th>金額</th>
-                <th>備註</th>
+                <th class="teen-only">金額</th>
+                <th class="teen-only">備註</th>
                 <th></th>
               </tr>
             </thead>
@@ -136,7 +183,7 @@
         </div>
 
         <div class="card__foot">
-          <div class="stats" id="checklistStats"></div>
+          <div class="stats teen-only" id="checklistStats"></div>
         </div>
       </section>
 
@@ -147,7 +194,7 @@
             <p class="muted">之後先買 / 想買嘅嘢。</p>
           </div>
 
-          <div class="toolbar">
+          <div class="toolbar teen-only">
             <input id="searchWishlist" class="search" placeholder="搜尋想買..." />
             <select id="filterWishlist" class="select">
               <option value="all">全部</option>
@@ -163,11 +210,12 @@
               <tr>
                 <th>已買</th>
                 <th>物品</th>
-                <th>分類</th>
+                <th class="teen-only">分類</th>
                 <th>數量</th>
+                <th class="teen-only">想買/認領</th>
                 <th>邊個買</th>
-                <th>金額</th>
-                <th>備註</th>
+                <th class="teen-only">金額</th>
+                <th class="teen-only">備註</th>
                 <th></th>
               </tr>
             </thead>
@@ -176,18 +224,19 @@
         </div>
 
         <div class="card__foot">
-          <div class="stats" id="wishlistStats"></div>
+          <div class="stats teen-only" id="wishlistStats"></div>
         </div>
       </section>
     </section>
 
-    <section class="card">
+    <section class="card" id="settleSection">
       <div class="card__head">
         <h2>結算</h2>
-        <p class="muted">自動計算總額同平分（多人同步）。</p>
+        <p class="muted teen-only">自動計算總額、平分、同「邊個要俾邊個」建議。</p>
+        <p class="muted elder-only">只顯示「邊個要俾邊個幾多」。</p>
       </div>
 
-      <div class="summary">
+      <div class="summary teen-only">
         <div class="summary__box">
           <div class="summary__label">總支出</div>
           <div id="totalSpent" class="summary__value">$0</div>
@@ -200,9 +249,10 @@
           <div class="summary__label">未處理項目</div>
           <div id="openCount" class="summary__value">0</div>
         </div>
-      
+      </div>
+
       <div class="settle">
-        <div class="settle__head">
+        <div class="settle__head teen-only">
           <div>
             <div class="settle__title">平分 & 差額</div>
             <div class="muted">輸入參加者（用逗號分隔），或者留空會自動用「邊個買」欄位推算。</div>
@@ -213,19 +263,25 @@
           </div>
         </div>
 
-        <div class="settle__inputs">
+        <div class="settle__inputs teen-only">
           <input id="participantsInput" class="input" placeholder="參加者：Wesley, 炒麵, BBB" />
         </div>
 
-        <div id="splitResult" class="settle__list"></div>
-      </div>
+        <div id="splitResult" class="settle__list teen-only"></div>
 
-</div>
+        <div class="settle__divider"></div>
+
+        <div class="settle__title">邊個要俾邊個（建議轉數）</div>
+        <div id="transferResult" class="settle__list"></div>
+
+        <div class="teen-only" style="margin-top:10px;">
+          <button id="btnCopyTransfers" class="btn btn--ghost" type="button">Copy 轉數清單</button>
+          <span id="copyToast" class="muted" style="margin-left:10px;"></span>
+        </div>
+      </div>
     </section>
   </main>
-
 
   <script type="module" src="./app.js"></script>
 </body>
 </html>
-

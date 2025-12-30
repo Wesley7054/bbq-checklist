@@ -1,17 +1,12 @@
 /* 
-  BBQ Checklist App (Firestore Realtime Sync)
-  - Single page static app (GitHub Pages friendly)
-  - Real-time sync across users via Firestore
-  - Room concept: /rooms/{roomId}
-  - Items stored in subcollections:
-      /rooms/{roomId}/checklist/{itemId}
-      /rooms/{roomId}/wishlist/{itemId}
+  BBQ Checklist App (Firestore Realtime Sync) - v3
+  Added:
+  - Two UI rhythms (Elder / Teen)
+  - Teen quick add parser
+  - Elder minimal columns + big entry buttons
+  - Copy transfers button
 
-  Notes:
-  - This file assumes your HTML has the same element IDs as your current version.
-  - Requires <script type="module" src="app.js"></script> in index.html
-  - Requires Firebase project + Firestore enabled
-  - Recommended: enable Firebase Auth (Anonymous) + rules require auth
+  Based on your v1/v2 code structure. fileciteturn0file0 fileciteturn0file1 fileciteturn0file2
 */
 
 // ===== Firebase (v9+ modular) =====
@@ -21,7 +16,6 @@ import {
   doc,
   collection,
   setDoc,
-  addDoc,
   updateDoc,
   deleteDoc,
   onSnapshot,
@@ -31,11 +25,7 @@ import {
   writeBatch,
   getDocs
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
-import {
-  getAuth,
-  signInAnonymously,
-  onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 
 // ===== 1) Paste your Firebase config here =====
 const firebaseConfig = {
@@ -47,7 +37,6 @@ const firebaseConfig = {
   appId: "1:300895897312:web:fbf41a8ff697011e893285"
 };
 
-// ===== App init =====
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -56,51 +45,94 @@ const auth = getAuth(app);
 const $ = (sel) => document.querySelector(sel);
 
 function uid() {
-  // Not cryptographically secure; good enough for local IDs.
   return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
 }
-
-function nowISO() {
-  return new Date().toISOString();
-}
-
-function safeNumber(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function currency(amount) {
-  const n = Number(amount || 0);
-  return `$${n.toFixed(2)}`;
-}
+function nowISO() { return new Date().toISOString(); }
+function safeNumber(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+function currency(amount) { const n = Number(amount || 0); return `$${n.toFixed(2)}`; }
 
 function matchesText(item, q) {
-  const t = `${item.name} ${item.category} ${item.note} ${item.who}`.toLowerCase();
+  const t = `${item.name} ${item.category} ${item.note} ${item.who} ${item.want}`.toLowerCase();
   return t.includes(q.toLowerCase());
 }
 
 // ===== Room handling =====
-// Use URL: .../index.html?room=bbq-2025
-// Fallback room: bbq-2025
 function getRoomId() {
   const u = new URL(location.href);
   const room = (u.searchParams.get("room") || "bbq-2025").trim();
-  // Firestore doc id cannot contain '/' etc.
-  return room.replace(/[\/#?[\]]/g, "-");
+  return room.replace(/[\/\/#?[\]]/g, "-");
 }
-
 const ROOM_ID = getRoomId();
 const roomRef = doc(db, "rooms", ROOM_ID);
 const checklistCol = collection(db, "rooms", ROOM_ID, "checklist");
 const wishlistCol = collection(db, "rooms", ROOM_ID, "wishlist");
 
+// ===== UI mode (Elder / Teen) =====
+const MODE_KEY = "bbq_ui_mode"; // 'elder' | 'teen'
+
+function getMode() {
+  const m = String(localStorage.getItem(MODE_KEY) || "teen").toLowerCase();
+  return m === "elder" ? "elder" : "teen";
+}
+function setMode(mode) {
+  const m = mode === "elder" ? "elder" : "teen";
+  localStorage.setItem(MODE_KEY, m);
+  document.body.classList.toggle("mode-elder", m === "elder");
+  syncModeButtons();
+  // re-render to switch columns / sections
+  render();
+}
+function syncModeButtons() {
+  const elderBtn = $("#btnModeElder");
+  const teenBtn = $("#btnModeTeen");
+  if (!elderBtn || !teenBtn) return;
+  const m = getMode();
+  elderBtn.classList.toggle("is-active", m === "elder");
+  teenBtn.classList.toggle("is-active", m === "teen");
+}
+
+function initModeUI() {
+  document.body.classList.toggle("mode-elder", getMode() === "elder");
+  syncModeButtons();
+
+  $("#btnModeElder")?.addEventListener("click", () => setMode("elder"));
+  $("#btnModeTeen")?.addEventListener("click", () => setMode("teen"));
+
+  // Elder entry buttons
+  $("#btnEnterList")?.addEventListener("click", () => {
+    $("#listsSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  $("#btnNewRoom")?.addEventListener("click", () => {
+    const id = prompt("新房間名（只用英文/數字/短橫線）", `bbq-${new Date().getFullYear()}`);
+    if (!id) return;
+    const cleaned = String(id).trim().replace(/[\/\/#?[\]]/g, "-");
+    const u = new URL(location.href);
+    u.searchParams.set("room", cleaned);
+    location.href = u.toString();
+  });
+
+  // Elder: set participants (include people who buy nothing)
+  $("#btnSetParticipants")?.addEventListener("click", async () => {
+    const current = getParticipants().join(", ");
+    const text = prompt("輸入參加者名（逗號分隔）\n例：阿明, 炒麵, AAA", current);
+    if (text === null) return;
+    const parts = parseParticipants(text);
+    await updateParticipantsToRoom(parts);
+    renderSplit();
+    // jump to settle so elder sees result
+    $("#settleSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+
+  // Show room id pill
+  const pill = $("#roomPill");
+  if (pill) pill.textContent = ROOM_ID;
+}
+
 // ===== Local view state =====
 let state = {
-  meta: {
-    version: 2,
-    roomId: ROOM_ID,
-    updatedAt: nowISO()
-  },
+  meta: { version: 4, roomId: ROOM_ID, updatedAt: nowISO() },
   checklist: [],
   wishlist: []
 };
@@ -108,38 +140,25 @@ let state = {
 let unsubChecklist = null;
 let unsubWishlist = null;
 let unsubRoom = null;
-
-// Prevent event storms when snapshot updates UI
 let isRenderingFromRemote = false;
 
 // ===== Default seed =====
 function seedItems() {
-  // Only seed if both collections are empty
   return {
     checklist: [
-      { name: "Charcoal", category: "food", qty: 1, note: "", done: false, bought: false, who: "", cost: 0 },
-      { name: "Tongs", category: "equipment", qty: 1, note: "", done: false, bought: false, who: "", cost: 0 },
-      { name: "Paper plates", category: "misc", qty: 1, note: "", done: false, bought: false, who: "", cost: 0 }
+      { name: "Charcoal", category: "food", qty: 1, note: "", want: "", done: false, bought: false, who: "", cost: 0 },
+      { name: "Tongs", category: "equipment", qty: 1, note: "", want: "", done: false, bought: false, who: "", cost: 0 },
+      { name: "Paper plates", category: "misc", qty: 1, note: "", want: "", done: false, bought: false, who: "", cost: 0 }
     ],
     wishlist: [
-      { name: "Portable fan", category: "equipment", qty: 1, note: "If outdoor super hot", bought: false, who: "", cost: 0 }
+      { name: "Portable fan", category: "equipment", qty: 1, note: "If outdoor super hot", want: "", bought: false, who: "", cost: 0 }
     ]
   };
 }
 
 async function ensureRoomExistsAndMaybeSeed() {
-  // Create room doc (upsert)
-  await setDoc(
-    roomRef,
-    {
-      roomId: ROOM_ID,
-      updatedAt: serverTimestamp(),
-      createdAt: serverTimestamp()
-    },
-    { merge: true }
-  );
+  await setDoc(roomRef, { roomId: ROOM_ID, updatedAt: serverTimestamp(), createdAt: serverTimestamp() }, { merge: true });
 
-  // Check emptiness
   const [cSnap, wSnap] = await Promise.all([getDocs(checklistCol), getDocs(wishlistCol)]);
   if (!cSnap.empty || !wSnap.empty) return;
 
@@ -154,19 +173,18 @@ async function ensureRoomExistsAndMaybeSeed() {
     const id = uid();
     batch.set(doc(wishlistCol, id), normalizeItemForWrite({ id, ...it }, "wishlist"));
   }
-
   batch.set(roomRef, { updatedAt: serverTimestamp() }, { merge: true });
   await batch.commit();
 }
 
 function normalizeItemForWrite(item, type) {
-  // Keep schema stable across clients
   const base = {
     id: item.id || uid(),
     name: (item.name || "").trim(),
     category: (item.category || "misc").trim(),
     qty: Math.max(1, safeNumber(item.qty ?? 1)),
     note: item.note || "",
+    want: item.want || "",
     who: item.who || "",
     cost: Math.max(0, safeNumber(item.cost ?? 0)),
     bought: !!item.bought,
@@ -174,10 +192,7 @@ function normalizeItemForWrite(item, type) {
     createdAt: item.createdAt || nowISO(),
     updatedAt: nowISO()
   };
-
-  // Small logic: if cost > 0 => bought true
   if (base.cost > 0) base.bought = true;
-
   return base;
 }
 
@@ -187,7 +202,6 @@ async function touchRoom() {
 
 // ===== Realtime listeners =====
 function startRealtime() {
-  // Order by createdAt for stable view. If old docs miss createdAt, Firestore still sorts them but could be mixed.
   const qChecklist = query(checklistCol, orderBy("createdAt", "desc"));
   const qWishlist = query(wishlistCol, orderBy("createdAt", "desc"));
 
@@ -201,7 +215,6 @@ function startRealtime() {
     render();
   });
 
-  // Room meta (participants list)
   unsubRoom = onSnapshot(roomRef, (snap) => {
     const data = snap.data() || {};
     const participants = Array.isArray(data.participants) ? data.participants : [];
@@ -209,39 +222,30 @@ function startRealtime() {
     syncParticipantsInput();
     renderSplit();
   });
-
 }
 
 function stopRealtime() {
-  if (unsubChecklist) unsubChecklist();
-  if (unsubWishlist) unsubWishlist();
-  if (unsubRoom) unsubRoom();
-  unsubChecklist = null;
-  unsubWishlist = null;
-  unsubRoom = null;
+  unsubChecklist?.(); unsubWishlist?.(); unsubRoom?.();
+  unsubChecklist = null; unsubWishlist = null; unsubRoom = null;
 }
 
 // ===== UI rendering =====
 function filteredChecklist() {
-  const q = $("#searchChecklist").value.trim();
-  const f = $("#filterChecklist").value;
-
+  const q = $("#searchChecklist")?.value?.trim() || "";
+  const f = $("#filterChecklist")?.value || "all";
   return state.checklist
     .filter((it) => (q ? matchesText(it, q) : true))
     .filter((it) => {
       if (f === "all") return true;
-      //if (f === "open") return !it.done && !it.bought;
       if (f === "open") return !it.done;
       if (f === "done") return !!it.done;
       if (f === "bought") return !!it.bought;
       return true;
     });
 }
-
 function filteredWishlist() {
-  const q = $("#searchWishlist").value.trim();
-  const f = $("#filterWishlist").value;
-
+  const q = $("#searchWishlist")?.value?.trim() || "";
+  const f = $("#filterWishlist")?.value || "all";
   return state.wishlist
     .filter((it) => (q ? matchesText(it, q) : true))
     .filter((it) => {
@@ -253,49 +257,40 @@ function filteredWishlist() {
 }
 
 function render() {
-  // Avoid re-entrant changes while rendering from snapshots
+  if (!$("#checklistBody") || !$("#wishlistBody")) return;
   isRenderingFromRemote = true;
 
-  renderTable({
-    items: filteredChecklist(),
-    tbody: $("#checklistBody"),
-    type: "checklist"
-  });
+  renderTable({ items: filteredChecklist(), tbody: $("#checklistBody"), type: "checklist" });
+  renderTable({ items: filteredWishlist(), tbody: $("#wishlistBody"), type: "wishlist" });
 
-  renderTable({
-    items: filteredWishlist(),
-    tbody: $("#wishlistBody"),
-    type: "wishlist"
-  });
-
-  renderStats();
+  if (getMode() === "teen") renderStats();
   renderSplit();
 
-  // Update meta display if you have a place for it (optional)
   state.meta.updatedAt = nowISO();
-
   isRenderingFromRemote = false;
 }
 
 function renderTable({ items, tbody, type }) {
   tbody.innerHTML = "";
+  const mode = getMode();
 
   for (const item of items) {
     const tr = document.createElement("tr");
-
     const checked = type === "checklist" ? !!item.done : !!item.bought;
 
     const labels = type === "checklist"
-      ? { check: "完成", item: "物品", cat: "分類", qty: "數量", who: "邊個買", cost: "金額", note: "備註", act: "操作" }
-      : { check: "已買", item: "物品", cat: "分類", qty: "數量", who: "邊個買", cost: "金額", note: "備註", act: "操作" };
+      ? { check: "完成", item: "物品", cat: "分類", qty: "數量", want: "想買/認領", who: "邊個買", cost: "金額", note: "備註", act: "操作" }
+      : { check: "已買", item: "物品", cat: "分類", qty: "數量", want: "想買/認領", who: "邊個買", cost: "金額", note: "備註", act: "操作" };
 
     tr.appendChild(tdCheckbox(type, item, checked, labels.check));
     tr.appendChild(tdText(item.name, "strong", labels.item));
-    tr.appendChild(tdBadge(item.category, labels.cat));
+
+    if (mode === "teen") tr.appendChild(tdBadge(item.category, labels.cat));
     tr.appendChild(tdQty(type, item, labels.qty));
+    if (mode === "teen") tr.appendChild(tdWant(type, item, labels.want));
     tr.appendChild(tdWho(type, item, labels.who));
-    tr.appendChild(tdCost(type, item, labels.cost));
-    tr.appendChild(tdNote(type, item, labels.note));
+    if (mode === "teen") tr.appendChild(tdCost(type, item, labels.cost));
+    if (mode === "teen") tr.appendChild(tdNote(type, item, labels.note));
     tr.appendChild(tdActions(type, item, labels.act));
 
     tbody.appendChild(tr);
@@ -304,7 +299,7 @@ function renderTable({ items, tbody, type }) {
   if (items.length === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 8;
+    td.colSpan = getMode() === "teen" ? 9 : 5;
     td.className = "muted";
     td.style.padding = "14px 10px";
     td.textContent = "呢度暫時冇嘢。";
@@ -321,7 +316,6 @@ function tdText(text, tag = "span", label = "") {
   td.appendChild(el);
   return td;
 }
-
 function tdBadge(category, label = "") {
   const td = document.createElement("td");
   if (label) td.dataset.label = label;
@@ -342,18 +336,10 @@ function tdCheckbox(type, item, checked, label = "") {
 
   input.addEventListener("change", async () => {
     if (isRenderingFromRemote) return;
-
     const patch = {};
-    if (type === "checklist") {
-      patch.done = input.checked;
-      // If marked done, not necessarily bought; keep as is
-    } else {
-      patch.bought = input.checked;
-    }
-
-    // If checked in any list => bought true is reasonable
+    if (type === "checklist") patch.done = input.checked;
+    else patch.bought = input.checked;
     if (input.checked) patch.bought = true;
-
     await updateItem(type, item.id, patch);
   });
 
@@ -364,18 +350,56 @@ function tdCheckbox(type, item, checked, label = "") {
 function tdQty(type, item, label = "") {
   const td = document.createElement("td");
   if (label) td.dataset.label = label;
+
+  const wrap = document.createElement("div");
+  wrap.className = "qty";
+
+  const btnMinus = document.createElement("button");
+  btnMinus.type = "button";
+  btnMinus.className = "qty__btn";
+  btnMinus.textContent = "−";
+  btnMinus.setAttribute("aria-label", "減少數量");
+
   const input = document.createElement("input");
   input.type = "number";
   input.min = "1";
   input.value = item.qty ?? 1;
-  input.style.width = "70px";
+  input.className = "qty__input";
 
-  input.addEventListener("change", async () => {
+  const btnPlus = document.createElement("button");
+  btnPlus.type = "button";
+  btnPlus.className = "qty__btn";
+  btnPlus.textContent = "+";
+  btnPlus.setAttribute("aria-label", "增加數量");
+
+  const commit = async (val) => {
     if (isRenderingFromRemote) return;
-    const qty = Math.max(1, safeNumber(input.value));
+    const qty = Math.max(1, safeNumber(val));
+    input.value = String(qty);
     await updateItem(type, item.id, { qty });
-  });
+  };
 
+  btnMinus.addEventListener("click", () => commit(safeNumber(input.value) - 1));
+  btnPlus.addEventListener("click", () => commit(safeNumber(input.value) + 1));
+  input.addEventListener("change", () => commit(input.value));
+
+  wrap.appendChild(btnMinus);
+  wrap.appendChild(input);
+  wrap.appendChild(btnPlus);
+  td.appendChild(wrap);
+  return td;
+}
+
+function tdWant(type, item, label = "") {
+  const td = document.createElement("td");
+  if (label) td.dataset.label = label;
+  const input = document.createElement("input");
+  input.placeholder = "想買/認領";
+  input.value = item.want || "";
+  input.addEventListener("blur", async () => {
+    if (isRenderingFromRemote) return;
+    await updateItem(type, item.id, { want: input.value });
+  });
   td.appendChild(input);
   return td;
 }
@@ -386,13 +410,10 @@ function tdWho(type, item, label = "") {
   const input = document.createElement("input");
   input.placeholder = "邊個買";
   input.value = item.who || "";
-
-  // Use debounce-ish pattern: update on blur to reduce writes
   input.addEventListener("blur", async () => {
     if (isRenderingFromRemote) return;
     await updateItem(type, item.id, { who: input.value });
   });
-
   td.appendChild(input);
   return td;
 }
@@ -426,12 +447,10 @@ function tdNote(type, item, label = "") {
   const input = document.createElement("input");
   input.placeholder = "備註...";
   input.value = item.note || "";
-
   input.addEventListener("blur", async () => {
     if (isRenderingFromRemote) return;
     await updateItem(type, item.id, { note: input.value });
   });
-
   td.appendChild(input);
   return td;
 }
@@ -467,6 +486,7 @@ function tdActions(type, item, label = "") {
   return td;
 }
 
+// ===== Stats (teen only) =====
 function renderStats() {
   const all = [...state.checklist, ...state.wishlist];
   const total = all.reduce((sum, it) => sum + safeNumber(it.cost), 0);
@@ -498,43 +518,29 @@ function renderStats() {
   `;
 }
 
-
-// ===== Split bill (participants + balance) =====
+// ===== Split bill + transfers =====
 function parseParticipants(text) {
-  return String(text || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  return String(text || "").split(",").map((s) => s.trim()).filter(Boolean);
 }
-
-function unique(arr) {
-  return Array.from(new Set(arr));
-}
+function unique(arr) { return Array.from(new Set(arr)); }
 
 function inferredParticipantsFromItems() {
   const all = [...state.checklist, ...state.wishlist];
-  return unique(
-    all
-      .map((it) => String(it.who || "").trim())
-      .filter(Boolean)
-  );
+  return unique(all.map((it) => String(it.who || "").trim()).filter(Boolean));
 }
 
 function getParticipants() {
   const fromRoom = Array.isArray(state.meta.participants) ? state.meta.participants : [];
-  if (fromRoom.length > 0) return fromRoom;
-  return inferredParticipantsFromItems();
+  const inferred = inferredParticipantsFromItems();
+  // Union = room-defined participants (including people who buy nothing) + inferred payers
+  return unique([...fromRoom, ...inferred].map((x) => String(x || "").trim()).filter(Boolean));
 }
 
 function syncParticipantsInput() {
-  const el = document.querySelector("#participantsInput");
+  const el = $("#participantsInput");
   if (!el) return;
-
-  // Don't overwrite while user is typing
   if (document.activeElement === el) return;
-
-  const participants = getParticipants();
-  el.value = participants.join(", ");
+  el.value = getParticipants().join(", ");
 }
 
 async function updateParticipantsToRoom(participants) {
@@ -542,26 +548,55 @@ async function updateParticipantsToRoom(participants) {
   await setDoc(roomRef, { participants: cleaned, updatedAt: serverTimestamp() }, { merge: true });
 }
 
+function computeTransfers(balances) {
+  const eps = 0.01;
+  const creditors = [];
+  const debtors = [];
+  for (const [name, diff] of Object.entries(balances)) {
+    const d = Number(diff || 0);
+    if (d > eps) creditors.push({ name, amt: d });
+    else if (d < -eps) debtors.push({ name, amt: -d });
+  }
+  creditors.sort((a, b) => b.amt - a.amt);
+  debtors.sort((a, b) => b.amt - a.amt);
+
+  const transfers = [];
+  let i = 0, j = 0;
+  while (i < debtors.length && j < creditors.length) {
+    const pay = debtors[i];
+    const recv = creditors[j];
+    const x = Math.min(pay.amt, recv.amt);
+    if (x > eps) transfers.push({ from: pay.name, to: recv.name, amount: x });
+    pay.amt -= x;
+    recv.amt -= x;
+    if (pay.amt <= eps) i++;
+    if (recv.amt <= eps) j++;
+  }
+  return transfers;
+}
+
 function renderSplit() {
-  const shareEl = document.querySelector("#perPersonShare");
-  const listEl = document.querySelector("#splitResult");
-  if (!shareEl || !listEl) return;
+  const transferEl = $("#transferResult");
+  if (!transferEl) return;
 
   const all = [...state.checklist, ...state.wishlist];
   const total = all.reduce((sum, it) => sum + safeNumber(it.cost), 0);
 
   const participants = getParticipants();
   const n = participants.length;
-
   const per = n > 0 ? total / n : 0;
-  shareEl.textContent = currency(per);
+
+  // teen-only UI
+  const shareEl = $("#perPersonShare");
+  const listEl = $("#splitResult");
+  if (shareEl) shareEl.textContent = currency(per);
 
   if (n === 0) {
-    listEl.innerHTML = `<div class="muted">先喺上面輸入參加者，或者喺「邊個買」填返名。</div>`;
+    if (listEl) listEl.innerHTML = `<div class="muted">先喺上面輸入參加者，或者喺「邊個買」填返名。</div>`;
+    transferEl.innerHTML = `<div class="muted">未有參加者，暫時唔計到轉數。</div>`;
     return;
   }
 
-  // Paid per person
   const paid = {};
   for (const name of participants) paid[name] = 0;
 
@@ -569,30 +604,22 @@ function renderSplit() {
     const who = String(it.who || "").trim();
     const cost = safeNumber(it.cost);
     if (!who || cost <= 0) continue;
-
-    // If name not in list, still count it (avoid losing data)
     if (!(who in paid)) paid[who] = 0;
-
     paid[who] += cost;
   }
 
-  // Balance: + => should receive, - => should pay
   const rows = Object.keys(paid).sort((a, b) => a.localeCompare(b, "zh-HK"));
-  listEl.innerHTML = rows
-    .map((name) => {
-      const diff = paid[name] - per;
-      const abs = Math.abs(diff);
+  const balances = {};
+  for (const name of rows) balances[name] = paid[name] - per;
 
+  if (listEl) {
+    listEl.innerHTML = rows.map((name) => {
+      const diff = balances[name];
+      const abs = Math.abs(diff);
       let action = "剛剛好 ✅";
       let hint = "唔使收 / 唔使俾";
-      if (diff > 0.00001) {
-        action = `應收返 ${currency(abs)}`;
-        hint = "你比多咗，可以收返差額";
-      } else if (diff < -0.00001) {
-        action = `應俾 ${currency(abs)}`;
-        hint = "你比少咗，要補返差額";
-      }
-
+      if (diff > 0.00001) { action = `應收返 ${currency(abs)}`; hint = "你比多咗，可以收返差額"; }
+      else if (diff < -0.00001) { action = `應俾 ${currency(abs)}`; hint = "你比少咗，要補返差額"; }
       return `
         <div class="settle__row">
           <div>
@@ -600,13 +627,37 @@ function renderSplit() {
             <div class="settle__hint">已俾：${currency(paid[name])}</div>
           </div>
           <div style="text-align:right">
-            <div style="font-weight:800">${action}</div>
+            <div style="font-weight:900">${action}</div>
             <div class="settle__hint">${hint}</div>
           </div>
         </div>
       `;
-    })
-    .join("");
+    }).join("");
+  }
+
+  const transfers = computeTransfers(balances);
+  if (transfers.length === 0) {
+    transferEl.innerHTML = `<div class="muted">全部人都已經差唔多平衡 ✅</div>`;
+    return;
+  }
+
+  transferEl.innerHTML = transfers.map((t) => {
+    return `
+      <div class="settle__row">
+        <div>
+          <div class="settle__name">${escapeHTML(t.from)} → ${escapeHTML(t.to)}</div>
+          <div class="settle__hint">建議轉數</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:900">${currency(t.amount)}</div>
+          <div class="settle__hint">（可自行合併/調整）</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  // cache transfers text for copy
+  state.meta.lastTransfersText = transfers.map((t) => `${t.from} -> ${t.to}: ${currency(t.amount)}`).join("\n");
 }
 
 function escapeHTML(s) {
@@ -619,31 +670,25 @@ function escapeHTML(s) {
 }
 
 // ===== Firestore operations =====
-function colForType(type) {
-  return type === "checklist" ? checklistCol : wishlistCol;
-}
+function colForType(type) { return type === "checklist" ? checklistCol : wishlistCol; }
 
 async function addItem(type, item) {
   const col = colForType(type);
   const id = item.id || uid();
-
-  // Use setDoc with known id so UI can reference it
   await setDoc(doc(col, id), normalizeItemForWrite({ ...item, id }, type));
   await touchRoom();
 }
 
 async function updateItem(type, id, patch) {
-  const col = colForType(type);
-  const ref = doc(col, id);
-
+  const ref = doc(colForType(type), id);
   const normalizedPatch = { ...patch, updatedAt: nowISO() };
 
-  // If cost set > 0 => bought true
   if ("cost" in normalizedPatch) {
     const cost = Math.max(0, safeNumber(normalizedPatch.cost));
     normalizedPatch.cost = cost;
     if (cost > 0) normalizedPatch.bought = true;
   }
+  if ("qty" in normalizedPatch) normalizedPatch.qty = Math.max(1, safeNumber(normalizedPatch.qty));
 
   await updateDoc(ref, normalizedPatch);
   await touchRoom();
@@ -652,9 +697,7 @@ async function updateItem(type, id, patch) {
 async function deleteItem(type, id) {
   const ok = confirm("刪除呢個項目？");
   if (!ok) return;
-
-  const col = colForType(type);
-  await deleteDoc(doc(col, id));
+  await deleteDoc(doc(colForType(type), id));
   await touchRoom();
 }
 
@@ -666,32 +709,19 @@ async function moveItem(type, id) {
   const item = fromArr.find((x) => x.id === id);
   if (!item) return;
 
-  // Copy item with adjustments
   const moved = { ...item };
-  if (toType === "wishlist") {
-    moved.done = false;
-  }
+  if (toType === "wishlist") moved.done = false;
 
   const batch = writeBatch(db);
   batch.delete(doc(colForType(fromType), id));
   batch.set(doc(colForType(toType), id), normalizeItemForWrite(moved, toType));
   batch.set(roomRef, { updatedAt: serverTimestamp() }, { merge: true });
-
   await batch.commit();
 }
 
-// ===== Export / Import =====
+// ===== Export / Import (teen) =====
 async function exportJSON() {
-  const payload = {
-    meta: {
-      version: 2,
-      roomId: ROOM_ID,
-      exportedAt: nowISO()
-    },
-    checklist: state.checklist,
-    wishlist: state.wishlist
-  };
-
+  const payload = { meta: { version: 4, roomId: ROOM_ID, exportedAt: nowISO() }, checklist: state.checklist, wishlist: state.wishlist };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -707,19 +737,13 @@ async function importJSONFile(file) {
   const parsed = JSON.parse(text);
 
   if (!parsed || typeof parsed !== "object") throw new Error("Invalid JSON");
-  if (!Array.isArray(parsed.checklist) || !Array.isArray(parsed.wishlist)) {
-    throw new Error("JSON must include checklist and wishlist arrays");
-  }
+  if (!Array.isArray(parsed.checklist) || !Array.isArray(parsed.wishlist)) throw new Error("JSON must include checklist and wishlist arrays");
 
-  // Replace remote data with imported data
   const batch = writeBatch(db);
-
-  // Delete existing docs
   const [cSnap, wSnap] = await Promise.all([getDocs(checklistCol), getDocs(wishlistCol)]);
   for (const d of cSnap.docs) batch.delete(d.ref);
   for (const d of wSnap.docs) batch.delete(d.ref);
 
-  // Write imported docs
   for (const raw of parsed.checklist) {
     const id = raw.id || uid();
     batch.set(doc(checklistCol, id), normalizeItemForWrite({ ...raw, id }, "checklist"));
@@ -728,23 +752,68 @@ async function importJSONFile(file) {
     const id = raw.id || uid();
     batch.set(doc(wishlistCol, id), normalizeItemForWrite({ ...raw, id }, "wishlist"));
   }
-
   batch.set(roomRef, { updatedAt: serverTimestamp() }, { merge: true });
   await batch.commit();
 }
 
+// ===== Accessibility font controls (teen) =====
+function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+function getBaseFont() {
+  const saved = Number(localStorage.getItem("bbq_baseFontPx"));
+  if (Number.isFinite(saved) && saved >= 14 && saved <= 22) return saved;
+  return 16;
+}
+function applyBaseFont(px) {
+  const v = clamp(px, 14, 22);
+  document.documentElement.style.setProperty("--baseFont", `${v}px`);
+  localStorage.setItem("bbq_baseFontPx", String(v));
+}
+function bindFontControls() {
+  const down = $("#btnFontDown");
+  const up = $("#btnFontUp");
+  if (!down || !up) return;
+  down.addEventListener("click", () => applyBaseFont(getBaseFont() - 1));
+  up.addEventListener("click", () => applyBaseFont(getBaseFont() + 1));
+  applyBaseFont(getBaseFont());
+}
+
+// ===== Teen quick add parser =====
+function parseQuickAdd(text) {
+  // Examples:
+  // "雞翼 x20" / "雞翼*20" / "汽水 6" / "炭 2"
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+
+  // normalize separators
+  const t = raw.replaceAll("×", "x").replaceAll("＊", "*").replaceAll("Ｘ", "x");
+
+  // pattern 1: name x qty
+  let m = t.match(/^(.+?)\s*[x\*]\s*(\d{1,4})\s*$/i);
+  if (m) return { name: m[1].trim(), qty: Math.max(1, safeNumber(m[2])) };
+
+  // pattern 2: name qty
+  m = t.match(/^(.+?)\s+(\d{1,4})\s*$/);
+  if (m) return { name: m[1].trim(), qty: Math.max(1, safeNumber(m[2])) };
+
+  return { name: raw, qty: 1 };
+}
+
 // ===== Events wiring =====
 function bindUIEvents() {
-  // Add new item
-  $("#addForm").addEventListener("submit", async (e) => {
+  initModeUI();
+  bindFontControls();
+
+  // Add new item (shared)
+  $("#addForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    const name = $("#itemName").value.trim();
-    const category = $("#itemCategory").value;
-    const list = $("#itemList").value; // "checklist" or "wishlist"
-    const qty = Math.max(1, safeNumber($("#itemQty").value));
-    const note = $("#itemNote").value.trim();
-    const who = $("#itemWho").value.trim();
+    const name = $("#itemName")?.value?.trim() || "";
+    const category = $("#itemCategory")?.value || "misc";
+    const list = $("#itemList")?.value || "checklist";
+    const qty = Math.max(1, safeNumber($("#itemQty")?.value));
+    const want = $("#itemWant")?.value?.trim() || "";
+    const who = $("#itemWho")?.value?.trim() || "";
+    const note = $("#itemNote")?.value?.trim() || "";
 
     if (!name) return;
 
@@ -754,30 +823,53 @@ function bindUIEvents() {
       category,
       qty,
       note,
+      want,
       who,
       done: false,
       bought: false,
-      who: "",
       cost: 0,
       createdAt: nowISO()
     };
 
     await addItem(list, item);
-
     e.target.reset();
-    $("#itemQty").value = "1";
-    $("#itemList").value = "checklist";
+    if ($("#itemQty")) $("#itemQty").value = "1";
+    if ($("#itemList")) $("#itemList").value = "checklist";
   });
 
-  // Filters/search (pure UI; snapshot will re-render anyway)
-  $("#searchChecklist").addEventListener("input", render);
-  $("#filterChecklist").addEventListener("change", render);
-  $("#searchWishlist").addEventListener("input", render);
-  $("#filterWishlist").addEventListener("change", render);
+  // Teen quick add
+  $("#quickAddForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const parsed = parseQuickAdd($("#quickAddText")?.value);
+    if (!parsed?.name) return;
 
+    const list = $("#quickAddList")?.value || "checklist";
+    await addItem(list, {
+      id: uid(),
+      name: parsed.name,
+      category: "misc",
+      qty: parsed.qty,
+      note: "",
+      want: "",
+      who: "",
+      done: false,
+      bought: false,
+      cost: 0,
+      createdAt: nowISO()
+    });
 
-  // Participants (split bill)
-  const participantsInput = document.querySelector("#participantsInput");
+    $("#quickAddText").value = "";
+    $("#quickAddText").focus();
+  });
+
+  // Filters/search (teen)
+  $("#searchChecklist")?.addEventListener("input", render);
+  $("#filterChecklist")?.addEventListener("change", render);
+  $("#searchWishlist")?.addEventListener("input", render);
+  $("#filterWishlist")?.addEventListener("change", render);
+
+  // Participants (teen)
+  const participantsInput = $("#participantsInput");
   if (participantsInput) {
     participantsInput.addEventListener("blur", async () => {
       if (isRenderingFromRemote) return;
@@ -785,66 +877,79 @@ function bindUIEvents() {
       await updateParticipantsToRoom(parts);
       renderSplit();
     });
-
-    // Live preview while typing (no writes)
-    participantsInput.addEventListener("input", () => {
-      renderSplit();
-    });
+    participantsInput.addEventListener("input", renderSplit);
   }
 
-  // Reset room data
-  $("#btnReset").addEventListener("click", async () => {
-    const ok = confirm(`確定要清空房間 "${ROOM_ID}" 嘅所有資料？（會影響所有人同步）`);
-    if (!ok) return;
+  // Reset room (teen)
+  const bindReset = (id) => {
+    $(id)?.addEventListener("click", async () => {
+      const ok = confirm(`確定要清空房間 "${ROOM_ID}" 嘅所有資料？（會影響所有人同步）`);
+      if (!ok) return;
 
-    const batch = writeBatch(db);
-    const [cSnap, wSnap] = await Promise.all([getDocs(checklistCol), getDocs(wishlistCol)]);
-    for (const d of cSnap.docs) batch.delete(d.ref);
-    for (const d of wSnap.docs) batch.delete(d.ref);
+      const batch = writeBatch(db);
+      const [cSnap, wSnap] = await Promise.all([getDocs(checklistCol), getDocs(wishlistCol)]);
+      for (const d of cSnap.docs) batch.delete(d.ref);
+      for (const d of wSnap.docs) batch.delete(d.ref);
 
-    const seed = seedItems();
-    for (const it of seed.checklist) {
-      const id = uid();
-      batch.set(doc(checklistCol, id), normalizeItemForWrite({ id, ...it }, "checklist"));
-    }
-    for (const it of seed.wishlist) {
-      const id = uid();
-      batch.set(doc(wishlistCol, id), normalizeItemForWrite({ id, ...it }, "wishlist"));
-    }
-    batch.set(roomRef, { updatedAt: serverTimestamp() }, { merge: true });
+      const seed = seedItems();
+      for (const it of seed.checklist) {
+        const id = uid();
+        batch.set(doc(checklistCol, id), normalizeItemForWrite({ id, ...it }, "checklist"));
+      }
+      for (const it of seed.wishlist) {
+        const id = uid();
+        batch.set(doc(wishlistCol, id), normalizeItemForWrite({ id, ...it }, "wishlist"));
+      }
+      batch.set(roomRef, { updatedAt: serverTimestamp() }, { merge: true });
+      await batch.commit();
+    });
+  };
+  bindReset("#btnReset");
+  bindReset("#btnReset2");
 
-    await batch.commit();
-  });
+  // Export/import (teen)
+  const bindExport = (id) => $(id)?.addEventListener("click", exportJSON);
+  bindExport("#btnExport");
+  bindExport("#btnExport2");
 
-  $("#btnExport").addEventListener("click", exportJSON);
+  const bindImport = (id) => {
+    $(id)?.addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        await importJSONFile(file);
+        alert("匯入成功 ✅");
+      } catch (err) {
+        alert(`匯入失敗：${err.message}`);
+      } finally {
+        e.target.value = "";
+      }
+    });
+  };
+  bindImport("#importFile");
+  bindImport("#importFile2");
 
-  $("#importFile").addEventListener("change", async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  // Copy transfers (teen)
+  $("#btnCopyTransfers")?.addEventListener("click", async () => {
+    const text = state.meta.lastTransfersText || "";
+    if (!text) return;
     try {
-      await importJSONFile(file);
-      alert("匯入成功 ✅");
-    } catch (err) {
-      alert(`匯入失敗：${err.message}`);
-    } finally {
-      e.target.value = "";
+      await navigator.clipboard.writeText(text);
+      const toast = $("#copyToast");
+      if (toast) {
+        toast.textContent = "已 copy ✅";
+        setTimeout(() => { toast.textContent = ""; }, 1200);
+      }
+    } catch {
+      alert("Copy 失敗：可能瀏覽器唔支援 clipboard。");
     }
   });
 }
 
 // ===== Auth + boot =====
 async function boot() {
-  // Show room id somewhere (optional)
-  // If your HTML has an element like #roomLabel, you can set it here:
-  // const roomLabel = document.querySelector("#roomLabel");
-  // if (roomLabel) roomLabel.textContent = ROOM_ID;
-
   bindUIEvents();
-
-  // Anonymous auth helps you use safer Firestore rules
   await signInAnonymously(auth);
-
   await ensureRoomExistsAndMaybeSeed();
   stopRealtime();
   startRealtime();
@@ -853,13 +958,10 @@ async function boot() {
 
 onAuthStateChanged(auth, (user) => {
   if (user) {
-    // User is signed in
-    // You can log uid if needed:
-    // console.log("Signed in as:", user.uid);
+    // signed in
   }
 });
 
-// Start
 boot().catch((err) => {
   console.error(err);
   alert("啟動失敗。請檢查 Firebase 設定同 Firestore/Auth。\n\n" + err.message);
