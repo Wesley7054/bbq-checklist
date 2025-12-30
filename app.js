@@ -71,7 +71,7 @@ const wishlistCol = collection(db, "rooms", ROOM_ID, "wishlist");
 const MODE_KEY = "bbq_ui_mode"; // 'elder' | 'teen'
 
 function getMode() {
-  const m = String(localStorage.getItem(MODE_KEY) || "teen").toLowerCase();
+  const m = String(localStorage.getItem(MODE_KEY) || "elder").toLowerCase();
   return m === "elder" ? "elder" : "teen";
 }
 function setMode(mode) {
