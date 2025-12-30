@@ -424,6 +424,10 @@ body.mode-elder .checkbox{ width:22px; height:22px; }
 
 /* Phone tweaks */
 @media (max-width: 640px){
+  /* Mobile: avoid double-sticky overlap when modebar wraps */
+  .header{ position: static; top: auto; }
+  .main{ padding-top: 6px; }
+
   .container{ width:min(1200px, 94vw); }
   .modebar__inner{ gap:10px; }
   .header{ top:72px; }

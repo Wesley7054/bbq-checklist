@@ -92,6 +92,10 @@ function syncModeButtons() {
 }
 
 function initModeUI() {
+  // If first time, default to EZ mode
+  if (localStorage.getItem(MODE_KEY) === null) {
+    localStorage.setItem(MODE_KEY, "elder");
+  }
   document.body.classList.toggle("mode-elder", getMode() === "elder");
   syncModeButtons();
 
