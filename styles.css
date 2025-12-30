@@ -514,3 +514,26 @@ body.mode-elder .checkbox{ width:22px; height:22px; }
 /* Actions cell */
 .actions-cell{ padding-top: 14px; }
 .actions-cell .icon-btn{ font-size: clamp(0.95rem, 3.2vw, 1.05rem); }
+
+
+/* Category select */
+.table td select{ width: 100%; }
+
+/* Advance category select */
+.table td select{
+  min-width: 120px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(23,26,35,.7);
+  color: var(--text);
+  outline: none;
+}
+.table td select:focus{
+  border-color: rgba(110,231,255,.5);
+  box-shadow: 0 0 0 3px rgba(110,231,255,.12);
+}
+
+@media (max-width: 640px){
+  .table td select{ min-width: 96px; }
+}

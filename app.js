@@ -69,19 +69,38 @@ const wishlistCol = collection(db, "rooms", ROOM_ID, "wishlist");
 
 // ===== UI mode (Elder / Teen) =====
 const MODE_KEY = "bbq_ui_mode"; // 'elder' | 'teen'
+const ADV_PASS = "11234";
+const ADV_UNLOCK_KEY = "bbq_adv_unlocked"; // "1" means unlocked on this device
 
 function getMode() {
   const m = String(localStorage.getItem(MODE_KEY) || "elder").toLowerCase();
   return m === "elder" ? "elder" : "teen";
 }
 function setMode(mode) {
-  const m = mode === "elder" ? "elder" : "teen";
-  localStorage.setItem(MODE_KEY, m);
-  document.body.classList.toggle("mode-elder", m === "elder");
+  const target = mode === "elder" ? "elder" : "teen";
+  // Entering Advance mode requires a simple password gate
+  if (target === "teen") {
+    const unlocked = localStorage.getItem(ADV_UNLOCK_KEY) === "1";
+    if (!unlocked) {
+      const pw = prompt("入 Advance mode 請輸入密碼");
+      if (pw !== ADV_PASS) {
+        alert("密碼錯誤");
+        // keep EZ
+        localStorage.setItem(MODE_KEY, "elder");
+        document.body.classList.add("mode-elder");
+        syncModeButtons();
+        render();
+        return;
+      }
+      localStorage.setItem(ADV_UNLOCK_KEY, "1");
+    }
+  }
+  localStorage.setItem(MODE_KEY, target);
+  document.body.classList.toggle("mode-elder", target === "elder");
   syncModeButtons();
-  // re-render to switch columns / sections
   render();
 }
+
 function syncModeButtons() {
   const elderBtn = $("#btnModeElder");
   const teenBtn = $("#btnModeTeen");
@@ -287,9 +306,9 @@ function renderTable({ items, tbody, type }) {
       : { check: "已買", item: "物品", cat: "分類", qty: "數量", want: "想買/認領", who: "邊個買", cost: "金額", note: "備註", act: "操作" };
 
     tr.appendChild(tdCheckbox(type, item, checked, labels.check));
-    tr.appendChild(tdText(item.name, "strong", labels.item));
+    tr.appendChild(mode === "teen" ? tdNameInput(type, item, labels.item) : tdText(item.name, "strong", labels.item));
 
-    if (mode === "teen") tr.appendChild(tdBadge(item.category, labels.cat));
+    if (mode === "teen") tr.appendChild(tdCategorySelect(type, item, labels.cat));
     tr.appendChild(tdQty(type, item, labels.qty));
     if (mode === "teen") tr.appendChild(tdWant(type, item, labels.want));
     tr.appendChild(tdWho(type, item, labels.who));
@@ -320,6 +339,31 @@ function tdText(text, tag = "span", label = "") {
   td.appendChild(el);
   return td;
 }
+
+function tdNameInput(type, item, label = "") {
+  const td = document.createElement("td");
+  if (label) td.dataset.label = label;
+
+  const input = document.createElement("input");
+  input.value = item.name || "";
+  input.placeholder = "物品";
+  input.addEventListener("blur", async () => {
+    if (isRenderingFromRemote) return;
+    const name = input.value.trim();
+    if (!name) {
+      // prevent empty name
+      input.value = item.name || "";
+      return;
+    }
+    if (name !== (item.name || "")) {
+      await updateItem(type, item.id, { name });
+    }
+  });
+
+  td.appendChild(input);
+  return td;
+}
+
 function tdBadge(category, label = "") {
   const td = document.createElement("td");
   if (label) td.dataset.label = label;
@@ -327,6 +371,30 @@ function tdBadge(category, label = "") {
   span.className = "badge";
   span.textContent = category || "misc";
   td.appendChild(span);
+  return td;
+}
+
+function tdCategorySelect(type, item, label = "") {
+  const td = document.createElement("td");
+  if (label) td.dataset.label = label;
+
+  const select = document.createElement("select");
+  const options = ["equipment", "food", "drink", "misc"];
+
+  for (const v of options) {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    if ((item.category || "misc") === v) opt.selected = true;
+    select.appendChild(opt);
+  }
+
+  select.addEventListener("change", async () => {
+    if (isRenderingFromRemote) return;
+    await updateItem(type, item.id, { category: select.value });
+  });
+
+  td.appendChild(select);
   return td;
 }
 
