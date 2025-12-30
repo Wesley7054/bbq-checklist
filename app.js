@@ -461,6 +461,7 @@ function tdNote(type, item, label = "") {
 
 function tdActions(type, item, label = "") {
   const td = document.createElement("td");
+  td.className = "actions-cell";
   if (label) td.dataset.label = label;
   td.style.whiteSpace = "nowrap";
 
@@ -468,7 +469,9 @@ function tdActions(type, item, label = "") {
   btnMove.type = "button";
   btnMove.className = "icon-btn";
   btnMove.title = type === "checklist" ? "移去「想買」" : "移去「清單」";
-  btnMove.textContent = type === "checklist" ? "→ 想買" : "→ 清單";
+  btnMove.textContent = (getMode() === "elder")
+    ? (type === "checklist" ? "移去「想買」" : "移去「清單」")
+    : (type === "checklist" ? "→ 想買" : "→ 清單");
   btnMove.addEventListener("click", async () => {
     if (isRenderingFromRemote) return;
     await moveItem(type, item.id);
@@ -478,7 +481,7 @@ function tdActions(type, item, label = "") {
   btnDel.type = "button";
   btnDel.className = "icon-btn";
   btnDel.title = "刪除";
-  btnDel.textContent = "🗑️";
+  btnDel.textContent = (getMode() === "elder") ? "刪除" : "🗑️";
   btnDel.style.marginLeft = "8px";
   btnDel.addEventListener("click", async () => {
     if (isRenderingFromRemote) return;
@@ -486,7 +489,7 @@ function tdActions(type, item, label = "") {
   });
 
   td.appendChild(btnMove);
-  td.appendChild(btnDel);
+  if (getMode() !== "elder") td.appendChild(btnDel);
   return td;
 }
 

@@ -437,7 +437,10 @@ body.mode-elder .checkbox{ width:22px; height:22px; }
   }
   body.mode-elder .qty{ width:100%; justify-content:flex-start; }
   body.mode-elder .qty__input{ width: 90px; }
-  body.mode-elder .icon-btn{ width:100%; text-align:center; }
+  body.mode-elder .icon-btn{ width:100%; text-align:center; padding:14px 14px; border-radius:16px; }
+  /* EZ mode: action buttons layout */
+  body.mode-elder .actions-cell{ padding-top: 10px; }
+  body.mode-elder .actions-cell{ display:flex; flex-direction:column; gap:10px; }
 
   /* Mobile: avoid double-sticky overlap when modebar wraps */
   .header{ position: static; top: auto; }
@@ -471,4 +474,43 @@ body.mode-elder .checkbox{ width:22px; height:22px; }
     flex: 0 0 auto;
     max-width: 45%;
   }
+
+
+  /* EZ mode (mobile): keep real table (single-line rows) + horizontal scroll */
+  body.mode-elder .table-wrap{ overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  body.mode-elder .table{ min-width: 720px; }
+  body.mode-elder .table thead{ display: table-header-group; }
+  body.mode-elder .table, 
+  body.mode-elder .table tbody{ display: table; width: 100%; }
+  body.mode-elder .table tr{ display: table-row; }
+  body.mode-elder .table td{ display: table-cell; padding: 10px 10px; }
+  body.mode-elder .table td::before{ display: none !important; content: "" !important; }
+
+  /* Compact controls so more fits */
+  body.mode-elder .qty__btn{ width: 38px; height: 38px; border-radius: 14px; }
+  body.mode-elder .qty__input{ width: 56px; }
+  body.mode-elder .table input{ font-size: 1rem; }
+
+  /* Make name column not explode */
+  body.mode-elder .table td:nth-child(2) strong{
+    display: inline-block;
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Actions button auto-size */
+  body.mode-elder .actions-cell .icon-btn{
+    width: auto !important;
+    padding: 10px 12px !important;
+    border-radius: 14px !important;
+    font-size: clamp(0.9rem, 3.0vw, 1rem);
+  }
+
 }
+
+
+/* Actions cell */
+.actions-cell{ padding-top: 14px; }
+.actions-cell .icon-btn{ font-size: clamp(0.95rem, 3.2vw, 1.05rem); }

@@ -1,28 +1,51 @@
-# BBQ Checklist & Wishlist (Static Web)
+# Checklist Web App 
 
-A simple static web app for a BBQ group:
-- Checklist: tick items as done / bought
-- Track **who bought** and **how much**
-- Wishlist: ideas and optional items
-- Export/Import JSON for syncing via GitHub
-- Data stored in LocalStorage
+A lightweight, real-time checklist web app designed for **both seniors and power users**.
 
-## Run locally
-Just open `index.html` in a browser.
+Built with **plain HTML / CSS / JavaScript + Firebase**, optimized for **mobile-first usage**, and deployable on **GitHub Pages**.
 
-## Deploy to GitHub Pages (get your link)
-1. Create a new repo (e.g. `bbq-checklist`)
-2. Upload these files: `index.html`, `styles.css`, `app.js`, `README.md`
-3. Go to **Settings → Pages**
-4. Under **Build and deployment**
-   - Source: `Deploy from a branch`
-   - Branch: `main` / `(root)`
-5. Save, then your link will look like:
-   `https://Wesley7054.github.io/bbq-checklist/`
+---
 
-## Team sync workflow (recommended)
-- One person exports JSON (`Export JSON`)
-- Commit that JSON file into repo (e.g. `data/latest.json`)
-- Everyone downloads that JSON and imports it (`Import`)
+## Key Features
 
-> Tip: You can also keep the JSON file in the repo and update it by PR.
+### Two Usage Modes (Progressive Disclosure)
+
+#### EZ Mode (Default)
+Designed for seniors and non-technical users.
+
+- Simple, clean UI
+- Each item displayed **in a single row**
+- Large buttons, minimal text
+- Actions available:
+  - Mark done / bought
+  - Adjust quantity (+ / -)
+  - Assign buyer
+  - Move item between *Checklist* and *Wishlist*
+-  **No delete function** (safe mode)
+
+#### Advance Mode
+Designed for power users.
+
+- Full feature set
+- Add / delete items
+- Wishlist management
+- Settlement & cost split
+- Filters and advanced interactions
+
+> The app defaults to **EZ Mode** on first load and remembers the user’s choice using `localStorage`.
+
+---
+
+## Mobile UX (V3.6 Behavior)
+
+- EZ Mode on mobile uses a **true table layout**
+- Each item stays **on a single horizontal row**
+- Horizontal scrolling is enabled if the screen is too narrow
+- No stacked cards, no hidden values
+- Controls automatically scale using CSS `clamp()`
+
+---
+
+## Multi-User Collaboration
+
+- Share the same list using a URL parameter:
